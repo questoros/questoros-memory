@@ -38,6 +38,17 @@ export default tseslint.config(
     },
   },
 
+  // Prisma client wrapper — generated client types are not available in CI
+  // without `prisma generate`, causing false-positive unsafe-* errors.
+  {
+    files: ['packages/database/src/client.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+    },
+  },
+
   // Test files — base TS rules only (no type-aware linting)
   {
     files: ['**/*.test.ts', '**/*.spec.ts'],
