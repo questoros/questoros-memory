@@ -1,0 +1,232 @@
+datasource db {
+  provider = "cockroachdb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// Multi-tenant organization.
+model Tenant {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String   @unique @db.String
+  name      String   @db.String
+  status    String   @default("ACTIVE") @db.String
+  metadata  Json     @default("{}") @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  workspaces        Workspace[]
+  projects          Project[]
+  actors            Actor[]
+  sourceArtifacts   SourceArtifact[]
+  memories          Memory[]
+  memoryRevisions   MemoryRevision[]
+  memoryAuditEvents MemoryAuditEvent[]
+  memoryEmbeddings  MemoryEmbedding[]
+
+  @@map("tenants")
+}
+
+/// A logical grouping within a tenant (e.g. a team or department).
+model Workspace {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  slug      String   @db.String
+  name      String   @db.String
+  status    String   @default("ACTIVE") @db.String
+  metadata  Json     @default("{}") @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  projects          Project[]
+  memories          Memory[]
+  memoryAuditEvents MemoryAuditEvent[]
+  sourceArtifacts   SourceArtifact[]
+
+  @@unique([tenantId, slug])
+  @@unique([tenantId, id])
+  @@map("workspaces")
+}
+
+/// A project within a tenant and workspace.
+model Project {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  slug        String   @db.String
+  name        String   @db.String
+  status      String   @default("ACTIVE") @db.String
+  metadata    Json     @default("{}") @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  workspace Workspace @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
+
+  sourceArtifacts   SourceArtifact[]
+  memories          Memory[]
+  memoryAuditEvents MemoryAuditEvent[]
+
+  @@unique([tenantId, workspaceId, slug])
+  @@unique([tenantId, id])
+  @@map("projects")
+}
+
+/// An actor that can interact with the memory system (user, agent, service, or system).
+model Actor {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  externalId  String   @map("external_id") @db.String
+  actorType   String   @map("actor_type") @db.String
+  displayName String?  @map("display_name") @db.String
+  metadata    Json     @default("{}") @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  memories          Memory[]
+  memoryRevisions   MemoryRevision[]
+  memoryAuditEvents MemoryAuditEvent[]
+
+  @@unique([tenantId, externalId])
+  @@unique([tenantId, id])
+  @@map("actors")
+}
+
+/// Provenance metadata for a source document or external artifact.
+model SourceArtifact {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  workspaceId    String?  @map("workspace_id") @db.Uuid
+  projectId      String?  @map("project_id") @db.Uuid
+  sourceType     String   @map("source_type") @db.String
+  sourceUri      String?  @map("source_uri") @db.String
+  contentType    String?  @map("content_type") @db.String
+  checksumSha256 String?  @map("checksum_sha256") @db.String
+  metadata       Json     @default("{}") @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
+  project   Project?   @relation(fields: [tenantId, projectId], references: [tenantId, id])
+
+  memories Memory[]
+
+  @@unique([tenantId, id])
+  @@map("source_artifacts")
+}
+
+/// A stored memory record.
+model Memory {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  workspaceId      String?   @map("workspace_id") @db.Uuid
+  projectId        String?   @map("project_id") @db.Uuid
+  actorId          String?   @map("actor_id") @db.Uuid
+  sourceArtifactId String?   @map("source_artifact_id") @db.Uuid
+  scopeType        String    @map("scope_type") @db.String
+  scopeId          String    @map("scope_id") @db.Uuid
+  memoryType       String    @map("memory_type") @db.String
+  status           String    @default("ACTIVE") @db.String
+  content          String    @db.String
+  contentHash      String    @map("content_hash") @db.String
+  importance       Decimal   @default(0.5000) @db.Decimal(5, 4)
+  confidence       Decimal   @default(1.0000) @db.Decimal(5, 4)
+  sensitivity      String    @default("STANDARD") @db.String
+  validFrom        DateTime  @default(now()) @map("valid_from") @db.Timestamptz(6)
+  validUntil       DateTime? @map("valid_until") @db.Timestamptz(6)
+  supersededById   String?   @map("superseded_by_id") @db.Uuid
+  metadata         Json      @default("{}") @db.JsonB
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  workspace      Workspace?      @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
+  project        Project?        @relation(fields: [tenantId, projectId], references: [tenantId, id])
+  actor          Actor?          @relation(fields: [tenantId, actorId], references: [tenantId, id])
+  sourceArtifact SourceArtifact? @relation(fields: [tenantId, sourceArtifactId], references: [tenantId, id])
+  supersededBy   Memory?         @relation("MemorySupersession", fields: [tenantId, supersededById], references: [tenantId, id])
+  superseded     Memory[]        @relation("MemorySupersession")
+
+  revisions   MemoryRevision[]
+  embeddings  MemoryEmbedding[]
+  auditEvents MemoryAuditEvent[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, scopeType, scopeId, status, updatedAt(dsc: true)])
+  @@index([tenantId, actorId, status, updatedAt(dsc: true)])
+  @@index([tenantId, sourceArtifactId])
+  @@index([tenantId, contentHash])
+  @@map("memories")
+}
+
+/// An immutable revision snapshot of a memory.
+model MemoryRevision {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  memoryId         String   @map("memory_id") @db.Uuid
+  revisionNumber   Int      @map("revision_number") @db.Int4
+  content          String   @db.String
+  contentHash      String   @map("content_hash") @db.String
+  reason           String?  @db.String
+  createdByActorId String?  @map("created_by_actor_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  memory Memory @relation(fields: [tenantId, memoryId], references: [tenantId, id])
+  actor  Actor? @relation(fields: [tenantId, createdByActorId], references: [tenantId, id])
+
+  @@unique([tenantId, memoryId, revisionNumber])
+  @@map("memory_revisions")
+}
+
+/// A vector embedding for a memory, used for semantic retrieval.
+model MemoryEmbedding {
+  id                  String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                      @map("tenant_id") @db.Uuid
+  memoryId            String                      @map("memory_id") @db.Uuid
+  scopeType           String                      @map("scope_type") @db.String
+  scopeId             String                      @map("scope_id") @db.Uuid
+  embeddingModel      String                      @map("embedding_model") @db.String
+  embeddingDimensions Int                         @map("embedding_dimensions") @db.Int4
+  embedding           Unsupported("vector(1024)") @map("embedding")
+  createdAt           DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  memory Memory @relation(fields: [tenantId, memoryId], references: [tenantId, id])
+
+  @@unique([tenantId, memoryId, embeddingModel, embeddingDimensions])
+  @@index([tenantId, memoryId])
+  @@map("memory_embeddings")
+}
+
+/// An audit event recording a memory-related action.
+model MemoryAuditEvent {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  workspaceId String?  @map("workspace_id") @db.Uuid
+  projectId   String?  @map("project_id") @db.Uuid
+  actorId     String?  @map("actor_id") @db.Uuid
+  memoryId    String?  @map("memory_id") @db.Uuid
+  action      String   @db.String
+  outcome     String   @db.String
+  requestId   String?  @map("request_id") @db.String
+  reason      String?  @db.String
+  metadata    Json     @default("{}") @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
+  project   Project?   @relation(fields: [tenantId, projectId], references: [tenantId, id])
+  actor     Actor?     @relation(fields: [tenantId, actorId], references: [tenantId, id])
+  memory    Memory?    @relation(fields: [tenantId, memoryId], references: [tenantId, id])
+
+  @@index([tenantId, createdAt(dsc: true)])
+  @@map("memory_audit_events")
+}

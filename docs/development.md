@@ -2,7 +2,7 @@
 
 ## Status
 
-Hackathon work in progress. Not production-ready.
+Phase 2 — Quality gates and initial CockroachDB schema implemented.
 
 ## Local setup
 
@@ -14,11 +14,51 @@ pnpm test
 pnpm build
 ```
 
-The scripts and workspace will be added during Phase 1 implementation.
-
 ## Environment variables
 
-Copy `.env.example` to a local `.env` or `.env.local` file and replace placeholders privately. Never commit real credentials.
+Copy `.env.example` to a local `.env` file and replace placeholders privately. Never commit real credentials.
+
+Required:
+
+- `DATABASE_URL` — CockroachDB connection string for the `questoros_memory` database.
+- `DATABASE_NAME` — Set to `questoros_memory`.
+
+Optional for integration tests:
+
+- `RUN_DATABASE_INTEGRATION_TESTS` — Set to `true` to enable live database verification.
+
+## Phase 2 quality tooling
+
+```bash
+# Lint all packages
+pnpm lint
+
+# Run tests with coverage
+pnpm test
+pnpm test:coverage
+```
+
+## Phase 2 database
+
+```bash
+# Validate and generate Prisma client
+pnpm --filter @questoros-memory/database prisma:validate
+pnpm --filter @questoros-memory/database prisma:generate
+
+# Bootstrap the target database
+pnpm --filter @questoros-memory/database db:bootstrap
+
+# Apply migrations
+pnpm --filter @questoros-memory/database db:migrate
+
+# Verify schema
+pnpm --filter @questoros-memory/database db:verify
+
+# Verify vector contract (opt-in, connects to the database)
+$env:RUN_DATABASE_INTEGRATION_TESTS="true"
+pnpm --filter @questoros-memory/database db:verify-vector
+Remove-Item Env:RUN_DATABASE_INTEGRATION_TESTS
+```
 
 ## CockroachDB Cloud Managed MCP in Cursor
 
@@ -35,32 +75,16 @@ The application SQL user and Managed MCP OAuth identity are separate access path
 
 ## MCP read-only verification results
 
-After authentication, the following read-only tests were performed against the questoros-memory cluster (Phase 1).
+### Phase 2 — After migration
 
-### Test 1 — List databases
+The `questoros_memory` database now contains all nine tables, ordinary indexes, and a CockroachDB vector index (`memory_embeddings_scope_cosine_idx`). Verification is documented in the repository.
+
+### Phase 1 — Pre-migration
 
 ```text
 Databases: defaultdb
-```
-
-`defaultdb` was present. No application database was created yet — that is expected for Phase 1.
-
-### Test 2 — List user-created tables
-
-```text
-defaultdb user-created tables: (none)
-```
-
-No application tables existed — correct for Phase 1.
-
-### Test 3 — Cluster configuration
-
-```text
 Plan: Basic
 Cloud provider: AWS
-Region: ap-southeast-1 (Singapore)
+Region: ap-southeast-1
 CockroachDB version: 26.2.1
-Status: CREATED
 ```
-
-The cluster configuration matches the expected Basic, AWS, Singapore setup. All tests were performed with read-only access only.
