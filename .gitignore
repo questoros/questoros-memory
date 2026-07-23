@@ -1,0 +1,13 @@
+node_modules/
+.pnpm-store/
+.turbo/
+.next/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+.cursor/mcp.json
+*.log
+.DS_Store
