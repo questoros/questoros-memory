@@ -14,6 +14,11 @@ Do not include database URLs, SQL passwords, OAuth tokens, AWS credentials, API 
 - Tenant, workspace, user, and project authorization must be applied before memory retrieval.
 - Stored memory and uploaded documents must be treated as potentially hostile input.
 
+## Detailed security documentation
+
+- [`docs/security.md`](docs/security.md) — security overview and access path descriptions.
+- [`docs/threat-model.md`](docs/threat-model.md) — enumerated threats and proposed controls.
+
 ## Reporting
 
 For a suspected vulnerability, contact the repository owner privately through the security-reporting method configured for this repository. Do not create a public issue containing exploitable details.

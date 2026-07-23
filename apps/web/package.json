@@ -1,0 +1,15 @@
+{
+  "name": "@questoros-memory/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Future demo UI and Memory Inspector for QuestorOS Memory",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"lint not configured for this package yet\"",
+    "test": "echo \"tests not implemented for this package yet\""
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

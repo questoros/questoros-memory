@@ -32,3 +32,35 @@ Copy `.env.example` to a local `.env` or `.env.local` file and replace placehold
 The Managed MCP connection is for schema inspection, query diagnostics, retrieval verification, and index recommendations. Do not use it for migrations or data writes.
 
 The application SQL user and Managed MCP OAuth identity are separate access paths. Never place the SQL password in the MCP configuration.
+
+## MCP read-only verification results
+
+After authentication, the following read-only tests were performed against the questoros-memory cluster (Phase 1).
+
+### Test 1 — List databases
+
+```text
+Databases: defaultdb
+```
+
+`defaultdb` was present. No application database was created yet — that is expected for Phase 1.
+
+### Test 2 — List user-created tables
+
+```text
+defaultdb user-created tables: (none)
+```
+
+No application tables existed — correct for Phase 1.
+
+### Test 3 — Cluster configuration
+
+```text
+Plan: Basic
+Cloud provider: AWS
+Region: ap-southeast-1 (Singapore)
+CockroachDB version: 26.2.1
+Status: CREATED
+```
+
+The cluster configuration matches the expected Basic, AWS, Singapore setup. All tests were performed with read-only access only.

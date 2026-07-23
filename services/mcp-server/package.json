@@ -1,0 +1,17 @@
+{
+  "name": "@questoros-memory/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Future customer-facing QuestorOS Memory MCP server",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"lint not configured for this package yet\"",
+    "test": "echo \"tests not implemented for this package yet\""
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

@@ -39,9 +39,17 @@ The broader QuestorOS product existed before the hackathon and already included 
 - Singapore region (`ap-southeast-1`)
 - Apache License 2.0
 
-## Development
+## Setup
 
-See [`docs/development.md`](docs/development.md) for safe local setup and read-only CockroachDB MCP configuration.
+```bash
+pnpm install
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```
+
+See [`docs/development.md`](docs/development.md) for full local setup instructions.
 
 ## Architecture
 
@@ -49,7 +57,7 @@ See [`docs/architecture.md`](docs/architecture.md).
 
 ## Security
 
-Read [`SECURITY.md`](SECURITY.md) before connecting credentials or external tools.
+Read [`SECURITY.md`](SECURITY.md), [`docs/security.md`](docs/security.md), and [`docs/threat-model.md`](docs/threat-model.md) before connecting credentials or external tools.
 
 ## License
 
