@@ -23,13 +23,11 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
 
-  // Type-aware rules — apply only to monorepo packages
+  // Type-aware rules — apply only to monorepo package source files
   {
-    files: ['packages/*/src/**/*.ts', 'packages/*/tests/**/*.ts'],
+    files: ['packages/*/src/**/*.ts'],
     extends: [
-      ...tseslint.configs.recommendedTypeChecked.map(
-        (cfg) => ({ ...cfg, files: undefined }), // remove file filters from individual configs
-      ),
+      ...tseslint.configs.recommendedTypeChecked.map((cfg) => ({ ...cfg, files: undefined })),
     ],
     languageOptions: {
       parserOptions: {
@@ -37,6 +35,23 @@ export default tseslint.config(
           allowDefaultProject: [],
         },
       },
+    },
+  },
+
+  // Test files — base TS rules only (no type-aware linting)
+  {
+    files: ['**/*.test.ts', '**/*.spec.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      // Test files use dynamic assertions and loose types
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
     },
   },
 
@@ -59,16 +74,6 @@ export default tseslint.config(
   // Node environment for scripts
   {
     files: ['packages/database/scripts/**/*.ts'],
-    languageOptions: {
-      globals: {
-        ...globals.node,
-      },
-    },
-  },
-
-  // Test files
-  {
-    files: ['**/*.test.ts', '**/*.spec.ts'],
     languageOptions: {
       globals: {
         ...globals.node,

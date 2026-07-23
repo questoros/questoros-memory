@@ -9,6 +9,10 @@ export interface ScopeResult {
   scopeId: string;
 }
 
+function isBlank(value: string | null | undefined): boolean {
+  return value === undefined || value === null || value.trim() === '';
+}
+
 /**
  * Resolve exactly one valid scope from the input IDs.
  *
@@ -22,27 +26,25 @@ export interface ScopeResult {
 export function resolveScope(input: ScopeInput): ScopeResult {
   const { tenantId, workspaceId, projectId } = input;
 
-  if (!tenantId || tenantId.trim() === '') {
+  if (isBlank(tenantId)) {
     throw new Error('tenantId must be a non-blank string');
   }
 
-  if (projectId) {
-    const pid = projectId.trim();
-    if (pid === '') {
+  if (projectId !== undefined && projectId !== null) {
+    if (projectId.trim() === '') {
       throw new Error('projectId must be a non-blank string when provided');
     }
-    if (!workspaceId || workspaceId.trim() === '') {
+    if (isBlank(workspaceId)) {
       throw new Error('project scope requires a non-blank workspaceId');
     }
-    return { scopeType: 'PROJECT', scopeId: pid };
+    return { scopeType: 'PROJECT', scopeId: projectId.trim() };
   }
 
-  if (workspaceId) {
-    const wid = workspaceId.trim();
-    if (wid === '') {
+  if (workspaceId !== undefined && workspaceId !== null) {
+    if (workspaceId.trim() === '') {
       throw new Error('workspaceId must be a non-blank string when provided');
     }
-    return { scopeType: 'WORKSPACE', scopeId: wid };
+    return { scopeType: 'WORKSPACE', scopeId: workspaceId.trim() };
   }
 
   return { scopeType: 'TENANT', scopeId: tenantId.trim() };
