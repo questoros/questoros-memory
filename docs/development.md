@@ -27,6 +27,12 @@ Optional for integration tests:
 
 - `RUN_DATABASE_INTEGRATION_TESTS` — Set to `true` to enable live database verification.
 
+## Node.js runtime
+
+- **Recommended**: Node.js 24 LTS (used in CI).
+- **Minimum supported**: Node.js 22 LTS.
+- Node.js 20 is not supported (end-of-life as of March 2026).
+
 ## Phase 2 quality tooling
 
 ```bash
@@ -94,3 +100,29 @@ Cloud provider: AWS
 Region: ap-southeast-1
 CockroachDB version: 26.2.1
 ```
+
+## Phase 2 CI validation
+
+The initial CI run (ID 30005064915) failed during `actions/setup-node@v4` because Node.js 20 is end-of-life and pnpm 11.16.0 requires Node.js >= 22. All subsequent quality steps were skipped.
+
+After updating the workflow:
+
+- `actions/checkout` from `@v4` to `@v6`
+- `actions/setup-node` from `@v4` to `@v6` with `node-version: 24`
+- `pnpm/action-setup` from `@v4` to `@v6` with `cache: true`
+- Removed deprecated `cache: 'pnpm'` from `setup-node`
+- Removed Node.js 20 matrix strategy
+- Updated `package.json` engines to `>=22.0.0`
+- Added `.node-version` and `.nvmrc` (both `24`)
+
+All remote quality steps passed on run ID 30007566361:
+
+- Checkout ✅
+- Set up Node.js ✅
+- Set up pnpm ✅
+- Install dependencies ✅
+- Format check ✅
+- Lint ✅
+- Typecheck ✅
+- Test ✅
+- Build ✅
