@@ -2,16 +2,25 @@
   "name": "@questoros-memory/database",
   "version": "0.1.0",
   "private": true,
-  "description": "Future schema, migrations, CockroachDB client, and vector-index definitions",
+  "description": "Schema, migrations, CockroachDB client, and vector-index definitions",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "lint": "echo \"lint not configured for this package yet\"",
-    "test": "echo \"tests not implemented for this package yet\""
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.7.0",
+    "dotenv": "^16.5.0",
+    "pg": "^8.14.0"
   },
   "devDependencies": {
-    "typescript": "^5.8.0"
+    "@types/pg": "^8.11.0",
+    "prisma": "^6.7.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.10"
   }
 }
