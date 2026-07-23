@@ -1,2 +1,1 @@
-// Placeholder — implementation pending Phase 2+.
-export {};
+export { isValidUuid, isValidIdentifier } from './ids';

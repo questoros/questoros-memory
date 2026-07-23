@@ -2,7 +2,7 @@
 
 ## Status
 
-Hackathon work in progress. Not production-ready.
+Phase 2 — Quality gates and initial CockroachDB schema implemented.
 
 ## Local setup
 
@@ -14,11 +14,57 @@ pnpm test
 pnpm build
 ```
 
-The scripts and workspace will be added during Phase 1 implementation.
-
 ## Environment variables
 
-Copy `.env.example` to a local `.env` or `.env.local` file and replace placeholders privately. Never commit real credentials.
+Copy `.env.example` to a local `.env` file and replace placeholders privately. Never commit real credentials.
+
+Required:
+
+- `DATABASE_URL` — CockroachDB connection string for the `questoros_memory` database.
+- `DATABASE_NAME` — Set to `questoros_memory`.
+
+Optional for integration tests:
+
+- `RUN_DATABASE_INTEGRATION_TESTS` — Set to `true` to enable live database verification.
+
+## Node.js runtime
+
+- **Recommended**: Node.js 24 LTS (used in CI).
+- **Minimum supported**: Node.js 22 LTS.
+- Node.js 20 is not supported (end-of-life as of March 2026).
+
+## Phase 2 quality tooling
+
+```bash
+# Lint all packages
+pnpm lint
+
+# Run tests with coverage
+pnpm test
+pnpm test:coverage
+```
+
+## Phase 2 database
+
+```bash
+# Validate and generate Prisma client
+pnpm --filter @questoros-memory/database prisma:validate
+pnpm --filter @questoros-memory/database prisma:generate
+
+# Bootstrap the target database
+pnpm --filter @questoros-memory/database db:bootstrap
+
+# Apply migrations
+pnpm --filter @questoros-memory/database db:migrate
+
+# Verify schema
+pnpm --filter @questoros-memory/database db:verify
+
+# Verify vector contract (opt-in, connects to the database)
+$env:RUN_DATABASE_INTEGRATION_TESTS="true"
+pnpm --filter @questoros-memory/database db:verify-vector
+Remove-Item Env:RUN_DATABASE_INTEGRATION_TESTS
+```
 
 ## CockroachDB Cloud Managed MCP in Cursor
 
@@ -35,32 +81,48 @@ The application SQL user and Managed MCP OAuth identity are separate access path
 
 ## MCP read-only verification results
 
-After authentication, the following read-only tests were performed against the questoros-memory cluster (Phase 1).
+### Phase 2 — After migration
 
-### Test 1 — List databases
+The `questoros_memory` database now contains all nine tables, ordinary indexes, and a CockroachDB vector index (`memory_embeddings_scope_cosine_idx`). All verification tests passed:
+
+- All nine tables confirmed: tenants, workspaces, projects, actors, source_artifacts, memories, memory_revisions, memory_embeddings, memory_audit_events.
+- Embedding column type: `vector(1024)`.
+- Ordinary indexes: memories_scope_lookup_idx, memories_actor_lookup_idx, memories_source_artifact_lookup_idx, memories_content_hash_idx, memory_embeddings_memory_idx, audit_events_tenant_created_idx.
+- Vector index: `memory_embeddings_scope_cosine_idx` with `vector_cosine_ops`.
+- Vector contract verified: synthetic cosine-distance query returns expected nearest memory. Transaction safely rolled back.
+
+### Phase 1 — Pre-migration
 
 ```text
 Databases: defaultdb
-```
-
-`defaultdb` was present. No application database was created yet — that is expected for Phase 1.
-
-### Test 2 — List user-created tables
-
-```text
-defaultdb user-created tables: (none)
-```
-
-No application tables existed — correct for Phase 1.
-
-### Test 3 — Cluster configuration
-
-```text
 Plan: Basic
 Cloud provider: AWS
-Region: ap-southeast-1 (Singapore)
+Region: ap-southeast-1
 CockroachDB version: 26.2.1
-Status: CREATED
 ```
 
-The cluster configuration matches the expected Basic, AWS, Singapore setup. All tests were performed with read-only access only.
+## Phase 2 CI validation
+
+The initial CI run (ID 30005064915) failed during `actions/setup-node@v4` because Node.js 20 is end-of-life and pnpm 11.16.0 requires Node.js >= 22. All subsequent quality steps were skipped.
+
+After updating the workflow:
+
+- `actions/checkout` from `@v4` to `@v6`
+- `actions/setup-node` from `@v4` to `@v6` with `node-version: 24`
+- `pnpm/action-setup` from `@v4` to `@v6` with `cache: true`
+- Removed deprecated `cache: 'pnpm'` from `setup-node`
+- Removed Node.js 20 matrix strategy
+- Updated `package.json` engines to `>=22.0.0`
+- Added `.node-version` and `.nvmrc` (both `24`)
+
+All remote quality steps passed on run ID 30007566361:
+
+- Checkout ✅
+- Set up Node.js ✅
+- Set up pnpm ✅
+- Install dependencies ✅
+- Format check ✅
+- Lint ✅
+- Typecheck ✅
+- Test ✅
+- Build ✅

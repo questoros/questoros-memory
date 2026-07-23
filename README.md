@@ -4,6 +4,13 @@
 
 > Hackathon work in progress. Not production-ready.
 
+## Phase 2 — Quality gates and database schema
+
+- Quality gates implemented: ESLint, Vitest, Husky, lint-staged, GitHub Actions CI.
+- Initial CockroachDB memory schema implemented with nine tables and native vector index.
+- Customer-facing APIs are not yet implemented.
+- AWS runtime is not yet deployed.
+
 ## MVP objective
 
 The hackathon MVP is intended to demonstrate:
