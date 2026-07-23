@@ -10,6 +10,10 @@
  * Prints only sanitized status messages. Never prints credentials or the full URL.
  */
 import pg from 'pg';
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config({ path: path.resolve(process.cwd(), '..', '..', '.env') });
 
 const { Client } = pg;
 
@@ -80,6 +84,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: Error) => {
-  console.error(`Bootstrap failed: ${err.message}`);
+  console.error(`Bootstrap failed: ${err.message}`, err.stack ? `\n${err.stack}` : '');
   process.exit(1);
 });

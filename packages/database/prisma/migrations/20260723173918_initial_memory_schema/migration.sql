@@ -2,6 +2,9 @@
 -- Initial memory schema for QuestorOS Memory
 -- CockroachDB native vector index with cosine similarity
 
+-- CockroachDB v26.2 creates tables with schema_locked = true.
+-- Unlock tables before any index creation or ALTER TABLE operations.
+
 -- 1. Tenants
 CREATE TABLE IF NOT EXISTS tenants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -83,6 +86,9 @@ CREATE TABLE IF NOT EXISTS source_artifacts (
     CONSTRAINT source_artifacts_project_requires_workspace CHECK (project_id IS NULL OR workspace_id IS NOT NULL)
 );
 
+-- Unlock source_artifacts before creating indexes
+ALTER TABLE source_artifacts SET (schema_locked = false);
+
 -- Composite foreign keys for source_artifacts (when workspace_id/project_id are present)
 CREATE INDEX IF NOT EXISTS source_artifacts_tenant_workspace_idx ON source_artifacts(tenant_id, workspace_id) WHERE workspace_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS source_artifacts_tenant_project_idx ON source_artifacts(tenant_id, project_id) WHERE project_id IS NOT NULL;
@@ -129,6 +135,9 @@ CREATE TABLE IF NOT EXISTS memories (
         (scope_type = 'PROJECT' AND scope_id IS NOT NULL AND workspace_id IS NOT NULL AND project_id IS NOT NULL)
     )
 );
+
+-- Unlock memories before creating indexes
+ALTER TABLE memories SET (schema_locked = false);
 
 -- Composite foreign keys for memories
 CREATE INDEX IF NOT EXISTS memories_tenant_workspace_idx ON memories(tenant_id, workspace_id) WHERE workspace_id IS NOT NULL;
@@ -181,6 +190,9 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
     CONSTRAINT memory_embeddings_scope_type_check CHECK (scope_type IN ('TENANT', 'WORKSPACE', 'PROJECT'))
 );
 
+-- Unlock memory_embeddings before creating indexes
+ALTER TABLE memory_embeddings SET (schema_locked = false);
+
 -- Ordinary index on memory_embeddings
 CREATE INDEX IF NOT EXISTS memory_embeddings_memory_idx ON memory_embeddings(tenant_id, memory_id);
 
@@ -212,6 +224,9 @@ CREATE TABLE IF NOT EXISTS memory_audit_events (
     CONSTRAINT memory_audit_events_outcome_check CHECK (outcome IN ('SUCCESS', 'DENIED', 'FAILED')),
     CONSTRAINT audit_project_requires_workspace CHECK (project_id IS NULL OR workspace_id IS NOT NULL)
 );
+
+-- Unlock memory_audit_events before creating indexes
+ALTER TABLE memory_audit_events SET (schema_locked = false);
 
 -- Composite foreign keys for memory_audit_events
 CREATE INDEX IF NOT EXISTS audit_events_tenant_workspace_idx ON memory_audit_events(tenant_id, workspace_id) WHERE workspace_id IS NOT NULL;
