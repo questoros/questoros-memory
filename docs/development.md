@@ -77,7 +77,13 @@ The application SQL user and Managed MCP OAuth identity are separate access path
 
 ### Phase 2 — After migration
 
-The `questoros_memory` database now contains all nine tables, ordinary indexes, and a CockroachDB vector index (`memory_embeddings_scope_cosine_idx`). Verification is documented in the repository.
+The `questoros_memory` database now contains all nine tables, ordinary indexes, and a CockroachDB vector index (`memory_embeddings_scope_cosine_idx`). All verification tests passed:
+
+- All nine tables confirmed: tenants, workspaces, projects, actors, source_artifacts, memories, memory_revisions, memory_embeddings, memory_audit_events.
+- Embedding column type: `vector(1024)`.
+- Ordinary indexes: memories_scope_lookup_idx, memories_actor_lookup_idx, memories_source_artifact_lookup_idx, memories_content_hash_idx, memory_embeddings_memory_idx, audit_events_tenant_created_idx.
+- Vector index: `memory_embeddings_scope_cosine_idx` with `vector_cosine_ops`.
+- Vector contract verified: synthetic cosine-distance query returns expected nearest memory. Transaction safely rolled back.
 
 ### Phase 1 — Pre-migration
 
