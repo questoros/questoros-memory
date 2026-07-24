@@ -1,2 +1,1 @@
-// Placeholder — implementation pending Phase 2+.
-export {};
+export { buildApp, startApp, stopApp } from './app.js';

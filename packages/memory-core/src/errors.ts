@@ -1,0 +1,32 @@
+export const ERROR_CODES = {
+  AUTH_REQUIRED: 'AUTH_REQUIRED',
+  AUTH_INVALID: 'AUTH_INVALID',
+  AUTH_EXPIRED: 'AUTH_EXPIRED',
+  AUTH_REVOKED: 'AUTH_REVOKED',
+  PERMISSION_DENIED: 'PERMISSION_DENIED',
+  SCOPE_DENIED: 'SCOPE_DENIED',
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  INVALID_CURSOR: 'INVALID_CURSOR',
+  MEMORY_NOT_FOUND: 'MEMORY_NOT_FOUND',
+  MEMORY_DUPLICATE: 'MEMORY_DUPLICATE',
+  MEMORY_DELETED: 'MEMORY_DELETED',
+  MEMORY_UNCHANGED: 'MEMORY_UNCHANGED',
+  EMBEDDING_INVALID: 'EMBEDDING_INVALID',
+  CONFLICT: 'CONFLICT',
+  DATABASE_RETRY_EXHAUSTED: 'DATABASE_RETRY_EXHAUSTED',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+} as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+export class ServiceError extends Error {
+  public readonly code: ErrorCode;
+  public readonly statusCode: number;
+
+  constructor(code: ErrorCode, message: string, statusCode: number = 400) {
+    super(message);
+    this.name = 'ServiceError';
+    this.code = code;
+    this.statusCode = statusCode;
+  }
+}

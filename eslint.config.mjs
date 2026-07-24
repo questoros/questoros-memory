@@ -8,12 +8,12 @@ export default tseslint.config(
   // Global ignore patterns
   {
     ignores: [
-      'node_modules',
-      '.turbo',
-      '.next',
-      'dist',
-      'build',
-      'coverage',
+      '**/node_modules/**',
+      '**/.turbo/**',
+      '**/.next/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/coverage/**',
       '**/prisma/generated/**',
       '**/migrations/**',
     ],

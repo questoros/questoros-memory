@@ -1,0 +1,24 @@
+{
+  "name": "@questoros-memory/memory-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Memory lifecycle operations, authentication, authorization, scope enforcement, and explainable search",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.7.0",
+    "@questoros-memory/memory-core": "workspace:*",
+    "@questoros-memory/database": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.10"
+  }
+}

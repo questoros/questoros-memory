@@ -1,6 +1,6 @@
 # Architecture
 
-> Planned hackathon architecture. Components described here are not complete unless explicitly marked otherwise.
+> Phase 3 adds authenticated REST and MCP transports over a shared memory-service layer. ICARE³™ lifecycle metadata is stored in existing Memory model fields without a new migration.
 
 ## Product path
 
@@ -9,6 +9,9 @@ QuestorOS or third-party AI client
                 |
                 v
 Customer-facing QuestorOS Memory MCP / REST API
+                |
+                v
+@questoros-memory/memory-service (shared business logic)
                 |
                 v
 Authentication, tenant isolation, permissions, audit
@@ -23,6 +26,14 @@ CockroachDB distributed memory and vector storage
                 |
                 +----> Amazon S3 source artifacts
 ```
+
+REST and MCP must not duplicate business rules or access Prisma directly. Both call the same `memory-service` transport helpers.
+
+## ICARE³ lifecycle (metadata.icare)
+
+Public: Issue → Context → Analysis → Recommendations → Evaluation → Execution → Evaluation
+
+Internal stages include `RECOMMENDATION_EVALUATION` and `EXECUTION_EVALUATION` for the two evaluation steps.
 
 ## Administrative and diagnostic path
 

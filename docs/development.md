@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 2 — Quality gates and initial CockroachDB schema implemented.
+Phase 3 — Memory API, MCP server, shared Zod/ICARE³ contracts, and hardening tests (mocked repository boundary).
 
 ## Local setup
 
@@ -33,6 +33,26 @@ Optional for integration tests:
 - **Minimum supported**: Node.js 22 LTS.
 - Node.js 20 is not supported (end-of-life as of March 2026).
 
+## Phase 3 services
+
+```powershell
+# REST API (local)
+pnpm dev:api
+
+# MCP stdio server (local)
+pnpm dev:mcp
+```
+
+Phase 3 unit tests mock the database and do not require `DATABASE_URL`. Opt-in integration tests:
+
+```powershell
+$env:RUN_DATABASE_INTEGRATION_TESTS="true"
+pnpm --filter @questoros-memory/database db:verify-vector
+Remove-Item Env:RUN_DATABASE_INTEGRATION_TESTS
+```
+
+Documentation: [`authentication.md`](authentication.md), [`rest-api.md`](rest-api.md), [`mcp-server.md`](mcp-server.md), [`phase-3-verification.md`](phase-3-verification.md).
+
 ## Phase 2 quality tooling
 
 ```bash
@@ -51,8 +71,11 @@ pnpm test:coverage
 pnpm --filter @questoros-memory/database prisma:validate
 pnpm --filter @questoros-memory/database prisma:generate
 
-# Bootstrap the target database
+# Bootstrap the target database (creates DB only; does not create API keys)
 pnpm --filter @questoros-memory/database db:bootstrap
+
+# Bootstrap local demo tenant/actor/API key into ignored .env
+pnpm --filter @questoros-memory/database auth:bootstrap-local -- --write-env
 
 # Apply migrations
 pnpm --filter @questoros-memory/database db:migrate

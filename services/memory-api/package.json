@@ -2,16 +2,27 @@
   "name": "@questoros-memory/memory-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Future authenticated REST interface for QuestorOS Memory",
+  "description": "Fastify REST API for QuestorOS Memory",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
-    "lint": "echo \"lint not configured for this package yet\"",
-    "test": "echo \"tests not implemented for this package yet\""
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "dev": "tsx watch src/cli.ts",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@questoros-memory/memory-core": "workspace:*",
+    "@questoros-memory/memory-service": "workspace:*",
+    "@questoros-memory/database": "workspace:*",
+    "fastify": "^5.10.0"
   },
   "devDependencies": {
-    "typescript": "^5.8.0"
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.10",
+    "tsx": "^4.19.0"
   }
 }

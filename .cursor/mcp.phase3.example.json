@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "questoros-memory": {
+      "command": "pnpm",
+      "args": ["--filter", "@questoros-memory/mcp-server", "dev"],
+      "env": {
+        "QUESTOROS_MEMORY_API_KEY": "${QUESTOROS_MEMORY_API_KEY:-placeholder-change-me}"
+      }
+    }
+  }
+}
