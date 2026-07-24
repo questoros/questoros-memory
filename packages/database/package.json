@@ -6,8 +6,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
     "prisma:format": "prisma format --schema prisma/schema.prisma",
@@ -16,10 +16,12 @@
     "db:bootstrap": "tsx scripts/bootstrap-database.ts",
     "db:migrate": "prisma migrate deploy --schema prisma/schema.prisma",
     "db:verify": "tsx scripts/verify-schema.ts",
-    "db:verify-vector": "tsx scripts/verify-vector-contract.ts"
+    "db:verify-vector": "tsx scripts/verify-vector-contract.ts",
+    "auth:bootstrap-local": "tsx scripts/bootstrap-local-auth.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.7.0",
+    "@questoros-memory/memory-core": "workspace:*",
     "dotenv": "^16.5.0",
     "pg": "^8.14.0"
   },

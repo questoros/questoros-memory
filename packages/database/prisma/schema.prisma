@@ -25,6 +25,7 @@ model Tenant {
   memoryRevisions   MemoryRevision[]
   memoryAuditEvents MemoryAuditEvent[]
   memoryEmbeddings  MemoryEmbedding[]
+  apiKeys           ApiKey[]
 
   @@map("tenants")
 }
@@ -46,6 +47,7 @@ model Workspace {
   memories          Memory[]
   memoryAuditEvents MemoryAuditEvent[]
   sourceArtifacts   SourceArtifact[]
+  apiKeys           ApiKey[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, id])
@@ -70,9 +72,11 @@ model Project {
   sourceArtifacts   SourceArtifact[]
   memories          Memory[]
   memoryAuditEvents MemoryAuditEvent[]
+  apiKeys           ApiKey[]
 
   @@unique([tenantId, workspaceId, slug])
   @@unique([tenantId, id])
+  @@unique([tenantId, workspaceId, id])
   @@map("projects")
 }
 
@@ -92,6 +96,7 @@ model Actor {
   memories          Memory[]
   memoryRevisions   MemoryRevision[]
   memoryAuditEvents MemoryAuditEvent[]
+  apiKeys           ApiKey[]
 
   @@unique([tenantId, externalId])
   @@unique([tenantId, id])
@@ -113,7 +118,7 @@ model SourceArtifact {
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id])
   workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
-  project   Project?   @relation(fields: [tenantId, projectId], references: [tenantId, id])
+  project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
 
   memories Memory[]
 
@@ -148,7 +153,7 @@ model Memory {
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id])
   workspace      Workspace?      @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
-  project        Project?        @relation(fields: [tenantId, projectId], references: [tenantId, id])
+  project        Project?        @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
   actor          Actor?          @relation(fields: [tenantId, actorId], references: [tenantId, id])
   sourceArtifact SourceArtifact? @relation(fields: [tenantId, sourceArtifactId], references: [tenantId, id])
   supersededBy   Memory?         @relation("MemorySupersession", fields: [tenantId, supersededById], references: [tenantId, id])
@@ -223,10 +228,38 @@ model MemoryAuditEvent {
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id])
   workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
-  project   Project?   @relation(fields: [tenantId, projectId], references: [tenantId, id])
+  project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
   actor     Actor?     @relation(fields: [tenantId, actorId], references: [tenantId, id])
   memory    Memory?    @relation(fields: [tenantId, memoryId], references: [tenantId, id])
 
   @@index([tenantId, createdAt(dsc: true)])
   @@map("memory_audit_events")
+}
+
+/// Database-backed API key for authentication.
+model ApiKey {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  actorId     String    @map("actor_id") @db.Uuid
+  name        String    @db.String
+  keyPrefix   String    @map("key_prefix") @db.String
+  keyHash     String    @map("key_hash") @db.String
+  scopeType   String    @map("scope_type") @db.String
+  scopeId     String    @map("scope_id") @db.Uuid
+  workspaceId String?   @map("workspace_id") @db.Uuid
+  projectId   String?   @map("project_id") @db.Uuid
+  permissions Json      @map("permissions") @db.JsonB
+  status      String    @default("ACTIVE") @db.String
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  actor     Actor      @relation(fields: [tenantId, actorId], references: [tenantId, id])
+  workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
+  project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
+
+  @@unique([keyHash])
+  @@unique([tenantId, id])
+  @@map("api_keys")
 }
