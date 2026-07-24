@@ -37,15 +37,15 @@ Every search executes within:
 
 Optional structured filters:
 
-| Filter                | Purpose                                    |
-| --------------------- | ------------------------------------------ |
-| `memoryTypes`         | Content classification (FACT, DECISION, …) |
-| `sensitivities`       | Data sensitivity tier                      |
-| `icareStages`         | ICARE³ lifecycle stage                     |
-| `reasoningChainId`    | Group memories in one reasoning cycle      |
-| `sourceArtifactId`    | Provenance link                            |
-| `updatedAfter/Before` | Temporal window                            |
-| `minimumScore`        | Vector similarity floor (vector mode)      |
+| Filter                | Purpose                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| `memoryTypes`         | Content classification (FACT, DECISION, …)                                              |
+| `sensitivities`       | Data sensitivity tier                                                                   |
+| `icareStages`         | ICARE³ lifecycle stage                                                                  |
+| `reasoningChainId`    | Group memories in one reasoning cycle                                                   |
+| `sourceArtifactId`    | Provenance link                                                                         |
+| `updatedAfter/Before` | Temporal window                                                                         |
+| `minimumScore`        | Optional vector similarity floor (`1 - cosine_distance`) applied in SQL for vector mode |
 
 Reasoning-chain and related-memory links **never** bypass tenant, workspace, or project isolation.
 

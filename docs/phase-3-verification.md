@@ -21,6 +21,7 @@ Run from repository root:
 
 ```powershell
 pnpm install --frozen-lockfile
+pnpm --filter @questoros-memory/database prisma:generate
 pnpm lint
 pnpm typecheck
 pnpm test
@@ -35,19 +36,23 @@ pnpm --filter @questoros-memory/database prisma:validate
 pnpm --filter @questoros-memory/database prisma:generate
 ```
 
+CI runs Prisma generate before format/lint/typecheck/test/build.
+
 ## Test suites added (Phase 3 hardening)
 
 | File                                               | Scope                               |
 | -------------------------------------------------- | ----------------------------------- |
 | `packages/memory-core/tests/icare.test.ts`         | ICARE³ lifecycle contract           |
 | `packages/memory-core/tests/schemas.test.ts`       | Shared Zod validation               |
+| `packages/memory-core/tests/cursor.test.ts`        | Cursor schema / injection rejection |
 | `packages/memory-service/tests/operations.test.ts` | Service ops + isolation (mocked DB) |
+| `packages/database/tests/sql-safety.test.ts`       | Parameterized SQL + upsert conflict |
 | `services/memory-api/tests/routes.test.ts`         | Fastify inject + mocked transport   |
 | `services/mcp-server/tests/tools.test.ts`          | Nine MCP tools + mocked transport   |
 
 Phase 3 unit tests do **not** require `DATABASE_URL`. Live CockroachDB integration remains opt-in via `RUN_DATABASE_INTEGRATION_TESTS=true`.
 
-**Current totals:** 195 tests (16 files), all passing without `DATABASE_URL`. Phase 3 hardening added 70 tests on top of the Phase 1–2 baseline of 125.
+**Current totals:** 215 tests (17 files), all passing without `DATABASE_URL`.
 
 ## Security checks
 

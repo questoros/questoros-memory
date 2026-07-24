@@ -17,17 +17,16 @@ Copy `.cursor/mcp.phase3.example.json` to `.cursor/mcp.json` locally and set:
   "mcpServers": {
     "questoros-memory": {
       "command": "pnpm",
-      "args": ["--filter", "@questoros-memory/mcp-server", "start"],
+      "args": ["--filter", "@questoros-memory/mcp-server", "dev"],
       "env": {
-        "DATABASE_URL": "<local-placeholder-only>",
-        "QUESTOROS_MEMORY_API_KEY": "qmem_live_example_0123456789abcdef0123456789abcdef"
+        "QUESTOROS_MEMORY_API_KEY": "${QUESTOROS_MEMORY_API_KEY:-placeholder-change-me}"
       }
     }
   }
 }
 ```
 
-Never commit `.cursor/mcp.json` or live credentials.
+Prefer aligning with `.cursor/mcp.phase3.example.json`. Never commit `.cursor/mcp.json` or live credentials. `DATABASE_URL` is loaded by the service from the process environment / ignored `.env`; do not paste live connection strings into MCP config.
 
 The CockroachDB Cloud Managed MCP server remains a separate, read-only administrative tool. Do not conflate it with this customer-facing memory MCP.
 
@@ -51,7 +50,7 @@ Tool names are exported as `MCP_TOOL_NAMES` from `services/mcp-server/src/tools.
 
 ## Validation
 
-Each mutating tool uses the same Zod shapes defined in `@questoros-memory/memory-core` as the REST API. Invalid input produces a safe `Error [CODE]: message` text response with `isError: true`.
+MCP tools use thinner transport-facing Zod input shapes for MCP SDK registration. Full request validation still runs through the shared `memory-service` / `memory-core` contracts used by REST. Invalid input produces a safe `Error [CODE]: message` text response with `isError: true`.
 
 ## Authentication and authorization
 

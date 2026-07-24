@@ -71,8 +71,11 @@ pnpm test:coverage
 pnpm --filter @questoros-memory/database prisma:validate
 pnpm --filter @questoros-memory/database prisma:generate
 
-# Bootstrap the target database
+# Bootstrap the target database (creates DB only; does not create API keys)
 pnpm --filter @questoros-memory/database db:bootstrap
+
+# Bootstrap local demo tenant/actor/API key into ignored .env
+pnpm --filter @questoros-memory/database auth:bootstrap-local -- --write-env
 
 # Apply migrations
 pnpm --filter @questoros-memory/database db:migrate

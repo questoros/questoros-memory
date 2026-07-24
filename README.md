@@ -30,7 +30,7 @@ See [`docs/rest-api.md`](docs/rest-api.md), [`docs/mcp-server.md`](docs/mcp-serv
 
 - Quality gates implemented: ESLint, Vitest, Husky, lint-staged, GitHub Actions CI.
 - Initial CockroachDB memory schema implemented with nine tables and native vector index.
-- Customer-facing APIs are not yet implemented.
+- Customer-facing REST and MCP interfaces are implemented in Phase 3 (local/dev; AWS runtime not deployed).
 - AWS runtime is not yet deployed.
 
 ## MVP objective
@@ -53,7 +53,7 @@ Used for read-only schema inspection, diagnostics, retrieval verification, and i
 
 ### QuestorOS Memory MCP Server
 
-The planned customer-facing service that will expose controlled memory operations without providing raw SQL or unrestricted database access.
+The customer-facing Phase 3 stdio MCP server that exposes nine controlled memory tools without providing raw SQL or unrestricted database access. Local configuration uses placeholders only; AWS hosting is not deployed yet.
 
 ## Repository status and disclosure
 
