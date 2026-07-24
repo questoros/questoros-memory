@@ -1,8 +1,8 @@
 {
-  "name": "@questoros-memory/memory-core",
+  "name": "@questoros-memory/memory-service",
   "version": "0.1.0",
   "private": true,
-  "description": "Memory type constants, core types, and contract definitions",
+  "description": "Memory lifecycle operations, authentication, authorization, scope enforcement, and explainable search",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -11,12 +11,14 @@
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@prisma/client": "^6.7.0",
+    "@questoros-memory/memory-core": "workspace:*",
+    "@questoros-memory/database": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.8.0",
     "vitest": "^4.1.10"
-  },
-  "dependencies": {
-    "zod": "^4.4.3"
   }
 }
