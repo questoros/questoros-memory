@@ -1,6 +1,18 @@
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@questoros-memory/memory-core': path.resolve(__dirname, 'packages/memory-core/src/index.ts'),
+      '@questoros-memory/database': path.resolve(__dirname, 'packages/database/src/index.ts'),
+      '@questoros-memory/memory-service': path.resolve(
+        __dirname,
+        'packages/memory-service/src/index.ts',
+      ),
+      '@questoros-memory/shared': path.resolve(__dirname, 'packages/shared/src/index.ts'),
+    },
+  },
   test: {
     environment: 'node',
     include: ['**/*.test.ts', '**/*.spec.ts'],
