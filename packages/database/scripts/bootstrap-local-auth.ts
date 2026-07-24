@@ -92,7 +92,9 @@ async function main() {
 
     // 1. Upsert Tenant
     const tenantResult = await client.query(
-      `UPSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id`,
+      `INSERT INTO tenants (slug, name) VALUES ($1, $2)
+       ON CONFLICT (slug) DO UPDATE SET name = excluded.name, updated_at = now()
+       RETURNING id`,
       [DEMO_TENANT_SLUG, DEMO_TENANT_NAME],
     );
     const tenantId = tenantResult.rows[0].id;
@@ -100,7 +102,9 @@ async function main() {
 
     // 2. Upsert Workspace
     const wsResult = await client.query(
-      `UPSERT INTO workspaces (tenant_id, slug, name) VALUES ($1, $2, $3) RETURNING id`,
+      `INSERT INTO workspaces (tenant_id, slug, name) VALUES ($1, $2, $3)
+       ON CONFLICT (tenant_id, slug) DO UPDATE SET name = excluded.name, updated_at = now()
+       RETURNING id`,
       [tenantId, DEMO_WORKSPACE_SLUG, DEMO_WORKSPACE_NAME],
     );
     const workspaceId = wsResult.rows[0].id;
@@ -108,7 +112,9 @@ async function main() {
 
     // 3. Upsert Project
     const projResult = await client.query(
-      `UPSERT INTO projects (tenant_id, workspace_id, slug, name) VALUES ($1, $2, $3, $4) RETURNING id`,
+      `INSERT INTO projects (tenant_id, workspace_id, slug, name) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (tenant_id, workspace_id, slug) DO UPDATE SET name = excluded.name, updated_at = now()
+       RETURNING id`,
       [tenantId, workspaceId, DEMO_PROJECT_SLUG, DEMO_PROJECT_NAME],
     );
     const projectId = projResult.rows[0].id;
@@ -116,7 +122,12 @@ async function main() {
 
     // 4. Upsert Actor
     const actorResult = await client.query(
-      `UPSERT INTO actors (tenant_id, external_id, actor_type, display_name) VALUES ($1, $2, $3, $4) RETURNING id`,
+      `INSERT INTO actors (tenant_id, external_id, actor_type, display_name) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (tenant_id, external_id) DO UPDATE SET
+         actor_type = excluded.actor_type,
+         display_name = excluded.display_name,
+         updated_at = now()
+       RETURNING id`,
       [tenantId, DEMO_ACTOR_EXTERNAL_ID, DEMO_ACTOR_TYPE, 'Local Demo Service'],
     );
     const actorId = actorResult.rows[0].id;

@@ -1,3 +1,5 @@
+import { cursorDataSchema } from './schemas.js';
+
 export interface CursorData {
   updatedAt: string; // ISO 8601
   id: string;
@@ -14,11 +16,12 @@ export function encodeCursor(updatedAt: Date, id: string): string {
 export function decodeCursor(cursor: string): CursorData {
   try {
     const json = Buffer.from(cursor, 'base64url').toString('utf-8');
-    const data = JSON.parse(json) as CursorData;
-    if (typeof data.updatedAt !== 'string' || typeof data.id !== 'string') {
-      throw new Error('Invalid cursor structure');
-    }
-    return data;
+    const parsed: unknown = JSON.parse(json);
+    const data = cursorDataSchema.parse(parsed);
+    return {
+      updatedAt: data.updatedAt,
+      id: data.id,
+    };
   } catch {
     throw new CursorError('Invalid cursor');
   }

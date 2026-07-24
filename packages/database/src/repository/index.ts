@@ -23,6 +23,9 @@ export {
   upsertWorkspace,
   upsertProject,
   upsertActor,
+  buildListMemoryConditions,
+  assertSqlFullyParameterized,
+  joinSqlAnd,
 } from './memory.js';
 export type {
   CreateMemoryInput,

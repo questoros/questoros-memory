@@ -255,6 +255,163 @@ export async function getMemory(
   return result[0] ?? null;
 }
 
+// ── Parameterized SQL helpers ──────────────────────────────────
+
+/** Join SQL fragments with AND for WHERE clauses. Exported for unit tests. */
+export function joinSqlAnd(parts: Prisma.Sql[]): Prisma.Sql {
+  return Prisma.join(parts, ' AND ');
+}
+
+/** True when every bound value is present in sql.values and absent from sql.strings. */
+export function assertSqlFullyParameterized(sql: Prisma.Sql, boundValues: unknown[]): void {
+  const text = sql.strings.join('');
+  for (const value of boundValues) {
+    if (value === null || value === undefined) continue;
+    let asString: string;
+    if (typeof value === 'string') {
+      asString = value;
+    } else if (
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      typeof value === 'bigint'
+    ) {
+      asString = String(value);
+    } else if (value instanceof Date) {
+      asString = value.toISOString();
+    } else {
+      continue;
+    }
+    if (asString.length === 0) continue;
+    if (text.includes(asString)) {
+      throw new Error(`Request-derived value appears in SQL text: ${asString.slice(0, 64)}`);
+    }
+    if (!sql.values.includes(value)) {
+      throw new Error(`Expected bound value missing from SQL parameters: ${asString.slice(0, 64)}`);
+    }
+  }
+}
+
+export function buildListMemoryConditions(
+  filter: ListMemoriesFilter,
+  cursor: ListMemoriesCursor | null,
+): { where: Prisma.Sql; boundValues: unknown[] } {
+  const conditions: Prisma.Sql[] = [Prisma.sql`m.tenant_id = ${filter.tenantId}::uuid`];
+  const boundValues: unknown[] = [filter.tenantId];
+
+  if (cursor) {
+    conditions.push(
+      Prisma.sql`(m.updated_at, m.id) < (${cursor.updatedAt}::timestamptz, ${cursor.id}::uuid)`,
+    );
+    boundValues.push(cursor.updatedAt, cursor.id);
+  }
+
+  if (filter.scopeType) {
+    conditions.push(Prisma.sql`m.scope_type = ${filter.scopeType}`);
+    boundValues.push(filter.scopeType);
+  }
+  if (filter.workspaceId !== undefined && filter.workspaceId !== null) {
+    conditions.push(Prisma.sql`m.workspace_id = ${filter.workspaceId}::uuid`);
+    boundValues.push(filter.workspaceId);
+  }
+  if (filter.projectId !== undefined && filter.projectId !== null) {
+    conditions.push(Prisma.sql`m.project_id = ${filter.projectId}::uuid`);
+    boundValues.push(filter.projectId);
+  }
+  if (filter.memoryType) {
+    conditions.push(Prisma.sql`m.memory_type = ${filter.memoryType}`);
+    boundValues.push(filter.memoryType);
+  }
+  if (filter.status) {
+    conditions.push(Prisma.sql`m.status = ${filter.status}`);
+    boundValues.push(filter.status);
+  } else {
+    conditions.push(Prisma.sql`m.status != 'DELETED'`);
+  }
+  if (filter.sensitivity) {
+    conditions.push(Prisma.sql`m.sensitivity = ${filter.sensitivity}`);
+    boundValues.push(filter.sensitivity);
+  }
+  if (filter.actorId) {
+    conditions.push(Prisma.sql`m.actor_id = ${filter.actorId}::uuid`);
+    boundValues.push(filter.actorId);
+  }
+  if (filter.updatedAfter) {
+    conditions.push(Prisma.sql`m.updated_at >= ${filter.updatedAfter}::timestamptz`);
+    boundValues.push(filter.updatedAfter);
+  }
+  if (filter.updatedBefore) {
+    conditions.push(Prisma.sql`m.updated_at <= ${filter.updatedBefore}::timestamptz`);
+    boundValues.push(filter.updatedBefore);
+  }
+  if (filter.sourceArtifactId) {
+    conditions.push(Prisma.sql`m.source_artifact_id = ${filter.sourceArtifactId}::uuid`);
+    boundValues.push(filter.sourceArtifactId);
+  }
+  if (filter.icareStage) {
+    conditions.push(Prisma.sql`m.metadata->'icare'->>'icareStage' = ${filter.icareStage}`);
+    boundValues.push(filter.icareStage);
+  }
+  if (filter.reasoningChainId) {
+    conditions.push(
+      Prisma.sql`m.metadata->'icare'->>'reasoningChainId' = ${filter.reasoningChainId}`,
+    );
+    boundValues.push(filter.reasoningChainId);
+  }
+
+  return { where: joinSqlAnd(conditions), boundValues };
+}
+
+function buildSearchMetadataConditions(
+  input: Pick<
+    SearchFilterInput,
+    | 'memoryTypes'
+    | 'sensitivities'
+    | 'icareStages'
+    | 'reasoningChainId'
+    | 'sourceArtifactId'
+    | 'updatedAfter'
+    | 'updatedBefore'
+  >,
+): { conditions: Prisma.Sql[]; boundValues: unknown[] } {
+  const conditions: Prisma.Sql[] = [];
+  const boundValues: unknown[] = [];
+
+  if (input.memoryTypes && input.memoryTypes.length > 0) {
+    conditions.push(Prisma.sql`m.memory_type IN (${Prisma.join(input.memoryTypes)})`);
+    boundValues.push(...input.memoryTypes);
+  }
+  if (input.sensitivities && input.sensitivities.length > 0) {
+    conditions.push(Prisma.sql`m.sensitivity IN (${Prisma.join(input.sensitivities)})`);
+    boundValues.push(...input.sensitivities);
+  }
+  if (input.icareStages && input.icareStages.length > 0) {
+    conditions.push(
+      Prisma.sql`m.metadata->'icare'->>'icareStage' IN (${Prisma.join(input.icareStages)})`,
+    );
+    boundValues.push(...input.icareStages);
+  }
+  if (input.reasoningChainId) {
+    conditions.push(
+      Prisma.sql`m.metadata->'icare'->>'reasoningChainId' = ${input.reasoningChainId}`,
+    );
+    boundValues.push(input.reasoningChainId);
+  }
+  if (input.sourceArtifactId) {
+    conditions.push(Prisma.sql`m.source_artifact_id = ${input.sourceArtifactId}::uuid`);
+    boundValues.push(input.sourceArtifactId);
+  }
+  if (input.updatedAfter) {
+    conditions.push(Prisma.sql`m.updated_at >= ${input.updatedAfter}::timestamptz`);
+    boundValues.push(input.updatedAfter);
+  }
+  if (input.updatedBefore) {
+    conditions.push(Prisma.sql`m.updated_at <= ${input.updatedBefore}::timestamptz`);
+    boundValues.push(input.updatedBefore);
+  }
+
+  return { conditions, boundValues };
+}
+
 // ── List memories ──────────────────────────────────────────────
 
 export async function listMemories(
@@ -262,59 +419,10 @@ export async function listMemories(
   filter: ListMemoriesFilter,
   cursor: ListMemoriesCursor | null,
 ): Promise<MemoryRow[]> {
-  const conditions: string[] = [`m.tenant_id = '${filter.tenantId}'`];
-
-  if (cursor) {
-    conditions.push(
-      `(m.updated_at, m.id) < ('${cursor.updatedAt}'::timestamptz, '${cursor.id}'::uuid)`,
-    );
-  }
-
-  if (filter.scopeType) {
-    conditions.push(`m.scope_type = '${filter.scopeType}'`);
-  }
-  if (filter.workspaceId !== undefined && filter.workspaceId !== null) {
-    conditions.push(`m.workspace_id = '${filter.workspaceId}'`);
-  } else if (filter.workspaceId === null && filter.scopeType !== 'TENANT') {
-    // Scope may be implied by scopeType
-  }
-  if (filter.projectId !== undefined && filter.projectId !== null) {
-    conditions.push(`m.project_id = '${filter.projectId}'`);
-  }
-  if (filter.memoryType) {
-    conditions.push(`m.memory_type = '${filter.memoryType}'`);
-  }
-  if (filter.status) {
-    conditions.push(`m.status = '${filter.status}'`);
-  } else {
-    conditions.push(`m.status != 'DELETED'`);
-  }
-  if (filter.sensitivity) {
-    conditions.push(`m.sensitivity = '${filter.sensitivity}'`);
-  }
-  if (filter.actorId) {
-    conditions.push(`m.actor_id = '${filter.actorId}'`);
-  }
-  if (filter.updatedAfter) {
-    conditions.push(`m.updated_at >= '${filter.updatedAfter.toISOString()}'::timestamptz`);
-  }
-  if (filter.updatedBefore) {
-    conditions.push(`m.updated_at <= '${filter.updatedBefore.toISOString()}'::timestamptz`);
-  }
-  if (filter.sourceArtifactId) {
-    conditions.push(`m.source_artifact_id = '${filter.sourceArtifactId}'`);
-  }
-  if (filter.icareStage) {
-    conditions.push(`m.metadata->'icare'->>'icareStage' = '${filter.icareStage}'`);
-  }
-  if (filter.reasoningChainId) {
-    conditions.push(`m.metadata->'icare'->>'reasoningChainId' = '${filter.reasoningChainId}'`);
-  }
-
-  const whereClause = conditions.join('\n      AND ');
+  const { where } = buildListMemoryConditions(filter, cursor);
   const limit = Math.min(filter.limit, 100);
 
-  const result = await prisma.$queryRawUnsafe<MemoryRow[]>(`
+  return prisma.$queryRaw<MemoryRow[]>`
     SELECT
       m.id, m.tenant_id AS "tenantId", m.workspace_id AS "workspaceId",
       m.project_id AS "projectId", m.actor_id AS "actorId",
@@ -328,12 +436,10 @@ export async function listMemories(
       m.metadata, m.created_at AS "createdAt", m.updated_at AS "updatedAt",
       m.deleted_at AS "deletedAt"
     FROM memories m
-    WHERE ${whereClause}
+    WHERE ${where}
     ORDER BY m.updated_at DESC, m.id DESC
     LIMIT ${limit}
-  `);
-
-  return result;
+  `;
 }
 
 // ── Update memory ──────────────────────────────────────────────
@@ -352,50 +458,38 @@ export async function updateMemory(
     metadata?: Record<string, unknown>;
   },
 ): Promise<MemoryRow> {
-  const setClauses: string[] = [];
-  const params: unknown[] = [];
-  let paramIndex = 1;
+  const setClauses: Prisma.Sql[] = [];
 
   if (updates.content !== undefined) {
-    setClauses.push(`content = $${paramIndex++}`);
-    params.push(updates.content);
-    setClauses.push(`content_hash = $${paramIndex++}`);
-    params.push(updates.contentHash);
+    setClauses.push(Prisma.sql`content = ${updates.content}`);
+    setClauses.push(Prisma.sql`content_hash = ${updates.contentHash}`);
   }
   if (updates.importance !== undefined) {
-    setClauses.push(`importance = $${paramIndex++}::decimal(5,4)`);
-    params.push(updates.importance);
+    setClauses.push(Prisma.sql`importance = ${updates.importance}::decimal(5,4)`);
   }
   if (updates.confidence !== undefined) {
-    setClauses.push(`confidence = $${paramIndex++}::decimal(5,4)`);
-    params.push(updates.confidence);
+    setClauses.push(Prisma.sql`confidence = ${updates.confidence}::decimal(5,4)`);
   }
   if (updates.sensitivity !== undefined) {
-    setClauses.push(`sensitivity = $${paramIndex++}`);
-    params.push(updates.sensitivity);
+    setClauses.push(Prisma.sql`sensitivity = ${updates.sensitivity}`);
   }
   if (updates.validUntil !== undefined) {
     if (updates.validUntil === null) {
-      setClauses.push(`valid_until = NULL`);
+      setClauses.push(Prisma.sql`valid_until = NULL`);
     } else {
-      setClauses.push(`valid_until = $${paramIndex++}::timestamptz`);
-      params.push(updates.validUntil);
+      setClauses.push(Prisma.sql`valid_until = ${updates.validUntil}::timestamptz`);
     }
   }
   if (updates.metadata !== undefined) {
-    setClauses.push(`metadata = $${paramIndex++}::jsonb`);
-    params.push(JSON.stringify(updates.metadata));
+    setClauses.push(Prisma.sql`metadata = ${JSON.stringify(updates.metadata)}::jsonb`);
   }
 
-  setClauses.push(`updated_at = now()`);
+  setClauses.push(Prisma.sql`updated_at = now()`);
 
-  params.push(tenantId, memoryId);
-
-  const result = await tx.$queryRawUnsafe<MemoryRow[]>(
-    `
+  const result = await tx.$queryRaw<MemoryRow[]>`
     UPDATE memories
-    SET ${setClauses.join(', ')}
-    WHERE tenant_id = $${paramIndex}::uuid AND id = $${paramIndex + 1}::uuid
+    SET ${Prisma.join(setClauses, ', ')}
+    WHERE tenant_id = ${tenantId}::uuid AND id = ${memoryId}::uuid
     RETURNING
       id, tenant_id AS "tenantId", workspace_id AS "workspaceId", project_id AS "projectId",
       actor_id AS "actorId", source_artifact_id AS "sourceArtifactId",
@@ -404,9 +498,7 @@ export async function updateMemory(
       confidence::float8 AS confidence, sensitivity, valid_from AS "validFrom",
       valid_until AS "validUntil", superseded_by_id AS "supersededById",
       metadata, created_at AS "createdAt", updated_at AS "updatedAt", deleted_at AS "deletedAt"
-  `,
-    ...params,
-  );
+  `;
 
   return result[0];
 }
@@ -473,7 +565,7 @@ export async function upsertEmbedding(
 ) {
   const vector = serializeVector(input.embedding);
   await tx.$executeRaw`
-    UPSERT INTO memory_embeddings (
+    INSERT INTO memory_embeddings (
       tenant_id, memory_id, scope_type, scope_id,
       embedding_model, embedding_dimensions, embedding
     ) VALUES (
@@ -482,6 +574,11 @@ export async function upsertEmbedding(
       ${input.embeddingModel}, ${input.embeddingDimensions},
       ${vector}::vector
     )
+    ON CONFLICT (tenant_id, memory_id, embedding_model, embedding_dimensions)
+    DO UPDATE SET
+      scope_type = excluded.scope_type,
+      scope_id = excluded.scope_id,
+      embedding = excluded.embedding
   `;
 }
 
@@ -510,51 +607,6 @@ export interface SearchFilterInput {
   limit: number;
 }
 
-function appendSearchMetadataFilters(
-  conditions: string[],
-  input: Pick<
-    SearchFilterInput,
-    | 'memoryTypes'
-    | 'sensitivities'
-    | 'icareStages'
-    | 'reasoningChainId'
-    | 'sourceArtifactId'
-    | 'updatedAfter'
-    | 'updatedBefore'
-  >,
-): void {
-  if (input.memoryTypes && input.memoryTypes.length > 0) {
-    const types = input.memoryTypes.map((t) => `'${t}'`).join(', ');
-    conditions.push(`m.memory_type IN (${types})`);
-  }
-
-  if (input.sensitivities && input.sensitivities.length > 0) {
-    const sens = input.sensitivities.map((s) => `'${s}'`).join(', ');
-    conditions.push(`m.sensitivity IN (${sens})`);
-  }
-
-  if (input.icareStages && input.icareStages.length > 0) {
-    const stages = input.icareStages.map((s) => `'${s}'`).join(', ');
-    conditions.push(`m.metadata->'icare'->>'icareStage' IN (${stages})`);
-  }
-
-  if (input.reasoningChainId) {
-    conditions.push(`m.metadata->'icare'->>'reasoningChainId' = '${input.reasoningChainId}'`);
-  }
-
-  if (input.sourceArtifactId) {
-    conditions.push(`m.source_artifact_id = '${input.sourceArtifactId}'`);
-  }
-
-  if (input.updatedAfter) {
-    conditions.push(`m.updated_at >= '${input.updatedAfter.toISOString()}'::timestamptz`);
-  }
-
-  if (input.updatedBefore) {
-    conditions.push(`m.updated_at <= '${input.updatedBefore.toISOString()}'::timestamptz`);
-  }
-}
-
 export async function searchByVector(
   prisma: PrismaClient,
   input: SearchFilterInput & {
@@ -564,17 +616,26 @@ export async function searchByVector(
 ): Promise<SearchMemoryRow[]> {
   const vector = serializeVector(input.queryEmbedding);
   const limit = Math.min(input.limit, 100);
+  const meta = buildSearchMetadataConditions(input);
 
-  const conditions: string[] = [
-    `m.tenant_id = '${input.tenantId}'`,
-    `me.scope_type = '${input.scopeType}'`,
-    `me.scope_id = '${input.scopeId}'`,
-    `m.status = 'ACTIVE'`,
+  const conditions: Prisma.Sql[] = [
+    Prisma.sql`m.tenant_id = ${input.tenantId}::uuid`,
+    Prisma.sql`me.scope_type = ${input.scopeType}`,
+    Prisma.sql`me.scope_id = ${input.scopeId}::uuid`,
+    Prisma.sql`m.status = 'ACTIVE'`,
+    ...meta.conditions,
   ];
 
-  appendSearchMetadataFilters(conditions, input);
+  if (input.minimumScore !== undefined) {
+    // cosine distance d ∈ [0,2]; similarity ≈ 1 - d for typical unit vectors.
+    conditions.push(
+      Prisma.sql`(1 - (me.embedding <=> ${vector}::vector)) >= ${input.minimumScore}`,
+    );
+  }
 
-  const result = await prisma.$queryRawUnsafe<SearchMemoryRow[]>(`
+  const where = joinSqlAnd(conditions);
+
+  return prisma.$queryRaw<SearchMemoryRow[]>`
     SELECT
       m.id, m.tenant_id, m.workspace_id, m.project_id,
       m.actor_id, m.source_artifact_id,
@@ -584,7 +645,7 @@ export async function searchByVector(
       m.sensitivity, m.valid_from, m.valid_until,
       m.superseded_by_id, m.metadata, m.created_at, m.updated_at, m.deleted_at,
       COALESCE(mr.revision_number, 1) AS revision_number,
-      (me.embedding <=> '${vector}'::vector) AS cosine_distance
+      (me.embedding <=> ${vector}::vector) AS cosine_distance
     FROM memories m
     JOIN memory_embeddings me ON me.tenant_id = m.tenant_id AND me.memory_id = m.id
     LEFT JOIN LATERAL (
@@ -593,12 +654,10 @@ export async function searchByVector(
       ORDER BY revision_number DESC
       LIMIT 1
     ) mr ON true
-    WHERE ${conditions.join('\n      AND ')}
-    ORDER BY me.embedding <=> '${vector}'::vector ASC
+    WHERE ${where}
+    ORDER BY me.embedding <=> ${vector}::vector ASC
     LIMIT ${limit}
-  `);
-
-  return result;
+  `;
 }
 
 export async function searchByText(
@@ -606,17 +665,19 @@ export async function searchByText(
   input: SearchFilterInput,
 ): Promise<SearchMemoryRow[]> {
   const limit = Math.min(input.limit, 100);
+  const meta = buildSearchMetadataConditions(input);
 
-  const conditions: string[] = [
-    `m.tenant_id = '${input.tenantId}'`,
-    `m.scope_type = '${input.scopeType}'`,
-    `m.scope_id = '${input.scopeId}'`,
-    `m.status = 'ACTIVE'`,
+  const conditions: Prisma.Sql[] = [
+    Prisma.sql`m.tenant_id = ${input.tenantId}::uuid`,
+    Prisma.sql`m.scope_type = ${input.scopeType}`,
+    Prisma.sql`m.scope_id = ${input.scopeId}::uuid`,
+    Prisma.sql`m.status = 'ACTIVE'`,
+    ...meta.conditions,
   ];
 
-  appendSearchMetadataFilters(conditions, input);
+  const where = joinSqlAnd(conditions);
 
-  const result = await prisma.$queryRawUnsafe<SearchMemoryRow[]>(`
+  return prisma.$queryRaw<SearchMemoryRow[]>`
     SELECT
       m.id, m.tenant_id, m.workspace_id, m.project_id,
       m.actor_id, m.source_artifact_id,
@@ -634,12 +695,10 @@ export async function searchByText(
       ORDER BY revision_number DESC
       LIMIT 1
     ) mr ON true
-    WHERE ${conditions.join('\n      AND ')}
+    WHERE ${where}
     ORDER BY m.updated_at DESC, m.id DESC
     LIMIT ${limit}
-  `);
-
-  return result;
+  `;
 }
 
 // ── ApiKey bootstrap ───────────────────────────────────────────
@@ -706,8 +765,10 @@ export async function upsertTenant(
   input: { slug: string; name: string },
 ): Promise<{ id: string }> {
   const result = await tx.$queryRaw<{ id: string }[]>`
-    UPSERT INTO tenants (slug, name)
+    INSERT INTO tenants (slug, name)
     VALUES (${input.slug}, ${input.name})
+    ON CONFLICT (slug)
+    DO UPDATE SET name = excluded.name, updated_at = now()
     RETURNING id
   `;
   return result[0];
@@ -718,8 +779,10 @@ export async function upsertWorkspace(
   input: { tenantId: string; slug: string; name: string },
 ): Promise<{ id: string }> {
   const result = await tx.$queryRaw<{ id: string }[]>`
-    UPSERT INTO workspaces (tenant_id, slug, name)
+    INSERT INTO workspaces (tenant_id, slug, name)
     VALUES (${input.tenantId}::uuid, ${input.slug}, ${input.name})
+    ON CONFLICT (tenant_id, slug)
+    DO UPDATE SET name = excluded.name, updated_at = now()
     RETURNING id
   `;
   return result[0];
@@ -730,8 +793,10 @@ export async function upsertProject(
   input: { tenantId: string; workspaceId: string; slug: string; name: string },
 ): Promise<{ id: string }> {
   const result = await tx.$queryRaw<{ id: string }[]>`
-    UPSERT INTO projects (tenant_id, workspace_id, slug, name)
+    INSERT INTO projects (tenant_id, workspace_id, slug, name)
     VALUES (${input.tenantId}::uuid, ${input.workspaceId}::uuid, ${input.slug}, ${input.name})
+    ON CONFLICT (tenant_id, workspace_id, slug)
+    DO UPDATE SET name = excluded.name, updated_at = now()
     RETURNING id
   `;
   return result[0];
@@ -742,8 +807,18 @@ export async function upsertActor(
   input: { tenantId: string; externalId: string; actorType: string; displayName?: string | null },
 ): Promise<{ id: string }> {
   const result = await tx.$queryRaw<{ id: string }[]>`
-    UPSERT INTO actors (tenant_id, external_id, actor_type, display_name)
-    VALUES (${input.tenantId}::uuid, ${input.externalId}, ${input.actorType}, ${input.displayName ?? null})
+    INSERT INTO actors (tenant_id, external_id, actor_type, display_name)
+    VALUES (
+      ${input.tenantId}::uuid,
+      ${input.externalId},
+      ${input.actorType},
+      ${input.displayName ?? null}
+    )
+    ON CONFLICT (tenant_id, external_id)
+    DO UPDATE SET
+      actor_type = excluded.actor_type,
+      display_name = excluded.display_name,
+      updated_at = now()
     RETURNING id
   `;
   return result[0];
