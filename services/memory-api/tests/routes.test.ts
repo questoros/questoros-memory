@@ -316,4 +316,32 @@ describe('REST routes', () => {
     expect(JSON.stringify(body)).not.toMatch(/Prisma|secret detail|stack/i);
     await app.close();
   });
+
+  it('maps malformed JSON to structured 400 VALIDATION_ERROR', async () => {
+    const app = await buildApp({ logLevel: 'silent' });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/memories',
+      headers: { ...authHeader(), 'content-type': 'application/json' },
+      payload: '{"content":',
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('VALIDATION_ERROR');
+    expect(response.json().error.message).toMatch(/malformed json/i);
+    expect(JSON.stringify(response.json())).not.toMatch(/stack|Prisma|DATABASE_URL/i);
+    await app.close();
+  });
+
+  it('maps unsupported content type to structured 415 VALIDATION_ERROR', async () => {
+    const app = await buildApp({ logLevel: 'silent' });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/memories',
+      headers: { ...authHeader(), 'content-type': 'application/xml' },
+      payload: '<memory/>',
+    });
+    expect(response.statusCode).toBe(415);
+    expect(response.json().error.code).toBe('VALIDATION_ERROR');
+    await app.close();
+  });
 });

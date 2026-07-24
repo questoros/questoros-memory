@@ -81,9 +81,17 @@ function workspaceAuth(): AuthContext {
   };
 }
 
-function projectAuth(): AuthContext {
+function projectAuth(
+  permissions: AuthContext['permissions'] = [
+    'memory:read',
+    'memory:write',
+    'memory:correct',
+    'memory:delete',
+    'memory:embed',
+  ],
+): AuthContext {
   return {
-    ...tenantAuth(['memory:read', 'memory:write']),
+    ...tenantAuth(permissions),
     credentialScope: {
       scopeType: 'PROJECT',
       scopeId: PROJECT_ID,
@@ -243,7 +251,7 @@ describe('createMemory', () => {
         icareStage: 'CONTEXT',
         relatedMemoryIds: [RELATED_ID],
       }),
-    ).rejects.toMatchObject({ code: ERROR_CODES.SCOPE_DENIED, statusCode: 403 });
+    ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR, statusCode: 400 });
   });
 });
 
@@ -266,11 +274,11 @@ describe('getMemory', () => {
     });
   });
 
-  it('denies project-scoped access to tenant memory', async () => {
+  it('returns opaque not-found for project-scoped access to tenant memory', async () => {
     vi.mocked(repo.getMemory).mockResolvedValue(makeMemory());
     await expect(getMemory(mockPrisma, projectAuth(), MEMORY_ID)).rejects.toMatchObject({
-      code: ERROR_CODES.SCOPE_DENIED,
-      statusCode: 403,
+      code: ERROR_CODES.MEMORY_NOT_FOUND,
+      statusCode: 404,
     });
   });
 });
@@ -281,7 +289,7 @@ describe('listMemories', () => {
     vi.mocked(repo.listMemories).mockResolvedValue([makeMemory()]);
   });
 
-  it('applies workspace filter for workspace credentials', async () => {
+  it('applies hierarchical workspace filter without forcing scopeType=WORKSPACE', async () => {
     await listMemories(mockPrisma, workspaceAuth(), { icareStage: 'ISSUE' });
     expect(repo.listMemories).toHaveBeenCalledWith(
       mockPrisma,
@@ -292,6 +300,39 @@ describe('listMemories', () => {
       }),
       null,
     );
+    const filter = vi.mocked(repo.listMemories).mock.calls[0][1];
+    expect(filter.scopeType).toBeUndefined();
+    expect(filter.projectId).toBeUndefined();
+  });
+
+  it('project credential defaults to project workspace+project filters', async () => {
+    await listMemories(mockPrisma, projectAuth(), {});
+    const filter = vi.mocked(repo.listMemories).mock.calls[0][1];
+    expect(filter).toEqual(
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+      }),
+    );
+    expect(filter.scopeType).toBeUndefined();
+  });
+
+  it('tenant credential defaults to tenant-wide listing', async () => {
+    await listMemories(mockPrisma, tenantAuth(), {});
+    const filter = vi.mocked(repo.listMemories).mock.calls[0][1];
+    expect(filter.tenantId).toBe(TENANT_ID);
+    expect(filter.scopeType).toBeUndefined();
+    expect(filter.workspaceId).toBeUndefined();
+    expect(filter.projectId).toBeUndefined();
+  });
+
+  it('rejects explicit out-of-authority list scope', async () => {
+    await expect(
+      listMemories(mockPrisma, workspaceAuth(), {
+        scopeType: 'TENANT',
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.SCOPE_DENIED, statusCode: 403 });
   });
 
   it('rejects list when read permission is missing', async () => {
@@ -300,10 +341,24 @@ describe('listMemories', () => {
     });
   });
 
-  it('rejects invalid cursor', async () => {
+  it('rejects invalid cursor before querying', async () => {
     await expect(
       listMemories(mockPrisma, tenantAuth(), { cursor: 'not-a-valid-cursor' }),
     ).rejects.toMatchObject({ code: ERROR_CODES.INVALID_CURSOR });
+    expect(repo.listMemories).not.toHaveBeenCalled();
+  });
+
+  it('rejects malicious SQL cursor before querying', async () => {
+    const malicious = Buffer.from(
+      JSON.stringify({
+        updatedAt: "2025-01-01T00:00:00.000Z') OR 1=1 --",
+        id: MEMORY_ID,
+      }),
+    ).toString('base64url');
+    await expect(
+      listMemories(mockPrisma, tenantAuth(), { cursor: malicious }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.INVALID_CURSOR });
+    expect(repo.listMemories).not.toHaveBeenCalled();
   });
 });
 
@@ -427,6 +482,49 @@ describe('deleteMemory', () => {
     vi.mocked(repo.getMemory).mockResolvedValue(makeMemory({ status: 'DELETED' }));
     const result = await deleteMemory(mockPrisma, tenantAuth(['memory:delete']), MEMORY_ID);
     expect(result.alreadyDeleted).toBe(true);
+  });
+
+  it('returns opaque not-found for out-of-workspace deleted memory', async () => {
+    vi.mocked(repo.getMemory).mockResolvedValue(
+      makeMemory({
+        status: 'DELETED',
+        scopeType: 'WORKSPACE',
+        scopeId: OTHER_WORKSPACE,
+        workspaceId: OTHER_WORKSPACE,
+        projectId: null,
+      }),
+    );
+    await expect(deleteMemory(mockPrisma, workspaceAuth(), MEMORY_ID)).rejects.toMatchObject({
+      code: ERROR_CODES.MEMORY_NOT_FOUND,
+      statusCode: 404,
+    });
+    expect(repo.softDeleteMemory).not.toHaveBeenCalled();
+  });
+
+  it('returns opaque not-found for out-of-project deleted memory', async () => {
+    vi.mocked(repo.getMemory).mockResolvedValue(
+      makeMemory({
+        status: 'DELETED',
+        scopeType: 'PROJECT',
+        scopeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        workspaceId: WORKSPACE_ID,
+        projectId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      }),
+    );
+    await expect(deleteMemory(mockPrisma, projectAuth(), MEMORY_ID)).rejects.toMatchObject({
+      code: ERROR_CODES.MEMORY_NOT_FOUND,
+      statusCode: 404,
+    });
+  });
+
+  it('returns opaque not-found when memory is missing (cross-tenant miss)', async () => {
+    vi.mocked(repo.getMemory).mockResolvedValue(null);
+    await expect(
+      deleteMemory(mockPrisma, tenantAuth(['memory:delete']), MEMORY_ID),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.MEMORY_NOT_FOUND,
+      statusCode: 404,
+    });
   });
 });
 
