@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import type { AuthContext, ApiPermission } from '@questoros-memory/memory-core';
+import { validatePermissions } from '@questoros-memory/memory-core';
 
 export interface StoredApiKey {
   id: string;
@@ -60,7 +61,13 @@ export function validateApiKeyStatus(stored: StoredApiKey): AuthContext | null {
   // Check expiration
   if (stored.expiresAt && new Date() > stored.expiresAt) return null;
 
-  const permissions = stored.permissions;
+  let permissions: ApiPermission[];
+  try {
+    permissions = validatePermissions(stored.permissions);
+  } catch {
+    // Corrupt permission payload must fail closed as an invalid credential.
+    return null;
+  }
 
   return {
     apiKeyId: stored.id,

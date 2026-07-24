@@ -265,37 +265,28 @@ export async function listMemories(
     ? resolveRequestedScope(input.scopeType, input.workspaceId, input.projectId)
     : null;
 
-  const filterScopeType = requestedScope?.scopeType ?? auth.credentialScope.scopeType;
-  let filterWorkspaceId = requestedScope?.workspaceId ?? null;
-  let filterProjectId = requestedScope?.projectId ?? null;
+  if (requestedScope) {
+    enforceScope(auth.credentialScope, requestedScope);
+  }
 
-  if (auth.credentialScope.scopeType === 'WORKSPACE') {
-    filterWorkspaceId = auth.credentialScope.workspaceId;
-    if (
-      requestedScope &&
-      requestedScope.scopeType === 'PROJECT' &&
-      requestedScope.workspaceId !== auth.credentialScope.workspaceId
-    ) {
-      throw new ServiceError(
-        ERROR_CODES.SCOPE_DENIED,
-        'Operation exceeds your credential scope.',
-        403,
-      );
-    }
+  // Hierarchical defaults when the client does not pass an explicit scope filter:
+  // - PROJECT credential → memories in that project
+  // - WORKSPACE credential → workspace + project memories in that workspace
+  // - TENANT credential → all memories in the tenant
+  // Explicit scopeType narrows; it never widens past credential authority.
+  let filterScopeType: string | undefined;
+  let filterWorkspaceId: string | null | undefined;
+  let filterProjectId: string | null | undefined;
+
+  if (requestedScope) {
+    filterScopeType = requestedScope.scopeType;
+    filterWorkspaceId = requestedScope.workspaceId;
+    filterProjectId = requestedScope.projectId;
   } else if (auth.credentialScope.scopeType === 'PROJECT') {
     filterWorkspaceId = auth.credentialScope.workspaceId;
     filterProjectId = auth.credentialScope.projectId;
-    if (
-      requestedScope &&
-      (requestedScope.workspaceId !== auth.credentialScope.workspaceId ||
-        requestedScope.projectId !== auth.credentialScope.projectId)
-    ) {
-      throw new ServiceError(
-        ERROR_CODES.SCOPE_DENIED,
-        'Operation exceeds your credential scope.',
-        403,
-      );
-    }
+  } else if (auth.credentialScope.scopeType === 'WORKSPACE') {
+    filterWorkspaceId = auth.credentialScope.workspaceId;
   }
 
   // Reasoning-chain filter never expands credential scope.
@@ -483,10 +474,6 @@ export async function deleteMemory(
         throw new ServiceError(ERROR_CODES.MEMORY_NOT_FOUND, 'Memory not found.', 404);
       }
 
-      if (memory.status === 'DELETED') {
-        return { alreadyDeleted: true };
-      }
-
       enforceMemoryScope(
         auth.credentialScope,
         memory.scopeType,
@@ -494,6 +481,10 @@ export async function deleteMemory(
         memory.workspaceId,
         memory.projectId,
       );
+
+      if (memory.status === 'DELETED') {
+        return { alreadyDeleted: true };
+      }
 
       await repo.softDeleteMemory(tx, auth.tenantId, memoryId);
       await repo.deleteEmbeddingsForMemory(tx, auth.tenantId, memoryId);
@@ -886,9 +877,9 @@ async function assertRelatedMemoriesAccessible(
       );
     } catch {
       throw new ServiceError(
-        ERROR_CODES.SCOPE_DENIED,
-        'Related memory reference exceeds credential scope.',
-        403,
+        ERROR_CODES.VALIDATION_ERROR,
+        'Related memory reference is invalid or inaccessible.',
+        400,
       );
     }
   }

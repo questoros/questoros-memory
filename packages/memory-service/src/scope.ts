@@ -79,10 +79,15 @@ export function enforceScope(
   }
 }
 
+/**
+ * Enforce that a loaded memory is within credential reach.
+ * Uses opaque MEMORY_NOT_FOUND so callers cannot probe existence of
+ * out-of-scope memory IDs via SCOPE_DENIED.
+ */
 export function enforceMemoryScope(
   credentialScope: CredentialScope,
   memoryScopeType: string,
-  memoryScopeId: string,
+  _memoryScopeId: string,
   memoryWorkspaceId: string | null,
   memoryProjectId: string | null,
 ): void {
@@ -91,5 +96,7 @@ export function enforceMemoryScope(
     workspaceId: memoryWorkspaceId,
     projectId: memoryProjectId,
   };
-  enforceScope(credentialScope, requested);
+  if (!isScopeContained(credentialScope, requested)) {
+    throw new ServiceError(ERROR_CODES.MEMORY_NOT_FOUND, 'Memory not found.', 404);
+  }
 }

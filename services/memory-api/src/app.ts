@@ -63,6 +63,20 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
         },
       });
     }
+    if (
+      err.statusCode === 400 &&
+      (err.code === 'FST_ERR_CTP_INVALID_JSON_BODY' ||
+        err.code === 'FST_ERR_CTP_EMPTY_JSON_BODY' ||
+        /json/i.test(String((error as Error).message ?? '')))
+    ) {
+      return reply.status(400).send({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Malformed JSON body.',
+          requestId,
+        },
+      });
+    }
     if (err.statusCode === 415 || err.code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE') {
       return reply.status(415).send({
         error: {
