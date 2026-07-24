@@ -1,8 +1,8 @@
 # Threat Model
 
-> **Status:** Documented threats. No mitigations are implemented in Phase 1.
+> **Status:** Threats documented; Phase 3 mitigations implemented for authentication, scope isolation, validation, and safe error handling in REST/MCP/service layers. Production hardening remains incomplete.
 
-This document enumerates threats relevant to the QuestorOS Memory project. Each threat is identified with an identifier, description, stage when it applies, and proposed control direction.
+This document enumerates threats relevant to the QuestorOS Memory / ICARE³™ project. Each threat is identified with an identifier, description, stage when it applies, and proposed control direction.
 
 ## Identified threats
 
@@ -19,6 +19,7 @@ An unauthenticated or unauthorized client connects to the customer-facing MCP se
 
 - **Stage:** MCP server connection and invocation.
 - **Control direction:** Require authentication on all MCP tool calls. Validate client identity.
+- **Phase 3 status:** API key required at server startup; tools call authenticated transport layer.
 
 ### T-03: Prompt injection from stored memory
 
@@ -40,6 +41,7 @@ Secrets (connection strings, passwords, tokens, API keys) are written to applica
 
 - **Stage:** Any logging or error-handling code path.
 - **Control direction:** Implement secret scrubbing for log output. Never log raw input or credentials.
+- **Phase 3 status:** Fastify logger redacts authorization and DATABASE_URL; MCP keeps diagnostics on stderr.
 
 ### T-06: Stale or superseded memory
 
@@ -82,6 +84,7 @@ A query executes without tenant, workspace, or project scope filters, returning 
 
 - **Stage:** Database query construction.
 - **Control direction:** Authorization filters must be mandatory in the data-access layer, not optional at the call site.
+- **Phase 3 status:** `memory-service` enforces scope on every operation; reasoning-chain filters do not expand scope.
 
 ## Out-of-scope for Phase 1
 
