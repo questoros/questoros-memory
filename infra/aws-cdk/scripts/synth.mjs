@@ -9,12 +9,15 @@ const repoRoot = path.resolve(infraRoot, '..', '..');
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const node = process.execPath;
 
-function run(command, args, cwd, extraEnv = {}) {
+function run(command, args, cwd, extraEnv = {}, options = {}) {
   const result = spawnSync(command, args, {
     cwd,
     env: { ...process.env, ...extraEnv },
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    // Windows requires a shell for .cmd launchers such as pnpm.cmd, but using a
+    // shell for process.execPath breaks when Node is installed under
+    // "C:\\Program Files". Native executables must be spawned directly.
+    shell: options.shell ?? false,
   });
 
   if (result.error || result.signal || result.status !== 0) {
@@ -23,7 +26,7 @@ function run(command, args, cwd, extraEnv = {}) {
   }
 }
 
-run(pnpm, ['build'], repoRoot);
+run(pnpm, ['build'], repoRoot, {}, { shell: process.platform === 'win32' });
 run(node, [path.join(scriptDir, 'prepare-prisma-runtime.mjs')], infraRoot);
 
 const outDir = path.join(infraRoot, 'cdk.out');
