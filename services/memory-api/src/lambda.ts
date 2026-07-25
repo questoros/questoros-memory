@@ -81,9 +81,7 @@ function requestHeaders(event: ApiGatewayV2Event): Record<string, string> {
   return headers;
 }
 
-function responseHeaders(
-  headers: Record<string, string | number | string[] | undefined>,
-): {
+function responseHeaders(headers: Record<string, string | number | string[] | undefined>): {
   headers: Record<string, string>;
   cookies?: string[];
 } {
