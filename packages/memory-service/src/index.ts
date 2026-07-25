@@ -54,6 +54,8 @@ export {
   syncPublishedArtifact,
   republishArtifact,
   __setStubDriveContent,
+  __setHarvestReasoningProvider,
+  __getHarvestReasoningProvider,
 } from './phase5.js';
 export {
   transportWhoami,

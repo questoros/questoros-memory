@@ -21,8 +21,17 @@ import {
   ICARE_PUBLIC_LIFECYCLE,
   type ApiPermission,
 } from '@questoros-memory/memory-core';
-import { DeterministicExtractor, analyzeAgainstMemories } from '@questoros-memory/harvester-core';
-import { StubDriveProvider } from '@questoros-memory/publisher-core';
+import {
+  DeterministicExtractor,
+  analyzeAgainstMemories,
+  ModelBackedHarvester,
+} from '@questoros-memory/harvester-core';
+import { StubDriveProvider, renderIntelligenceBrief } from '@questoros-memory/publisher-core';
+import {
+  createReasoningProvider,
+  MockReasoningProvider,
+  type ReasoningProvider,
+} from '@questoros-memory/reasoning-provider';
 import * as repo from '@questoros-memory/database';
 import { withTransaction } from '@questoros-memory/database';
 import { resolveRequestedScope, enforceScope, enforceMemoryScope } from './scope.js';
@@ -32,6 +41,28 @@ import { listMemories as listMemoriesOp, searchMemories } from './operations.js'
 const defaultExtractor = new DeterministicExtractor();
 /** Process-local stub Drive used when provider=stub (tests + hackathon). */
 const stubDrive = new StubDriveProvider();
+
+let harvestReasoning: ReasoningProvider = new MockReasoningProvider();
+let agenticHarvester = new ModelBackedHarvester({ reasoning: harvestReasoning });
+
+/** Test/helper: inject a reasoning provider without live model calls. */
+export function __setHarvestReasoningProvider(provider: ReasoningProvider | null): void {
+  harvestReasoning = provider ?? new MockReasoningProvider();
+  agenticHarvester = new ModelBackedHarvester({ reasoning: harvestReasoning });
+}
+
+export function __getHarvestReasoningProvider(): ReasoningProvider {
+  return harvestReasoning;
+}
+
+try {
+  // Prefer configured provider; fall back to mock when live calls are gated.
+  harvestReasoning = createReasoningProvider();
+  agenticHarvester = new ModelBackedHarvester({ reasoning: harvestReasoning });
+} catch {
+  harvestReasoning = new MockReasoningProvider();
+  agenticHarvester = new ModelBackedHarvester({ reasoning: harvestReasoning });
+}
 
 function requirePermission(auth: AuthContext, required: ApiPermission): void {
   if (!hasPermission(auth.permissions, required)) {
@@ -219,42 +250,104 @@ export async function createHarvestRun(
       },
     });
 
-    const existing = await repo.listMemories(
-      prisma,
-      {
+    // Prefer scoped text search for related memories, then fall back to list.
+    let existing: Array<{
+      id: string;
+      content: string;
+      memoryType: string;
+      scopeType?: string;
+      sensitivity?: string;
+      status?: string;
+    }> = [];
+
+    try {
+      const searchRows = await repo.searchByText(prisma, {
         tenantId: auth.tenantId,
         scopeType: requested.scopeType,
-        workspaceId: requested.workspaceId,
-        projectId: requested.projectId,
-        status: 'ACTIVE',
-        limit: 100,
-      },
-      null,
-    );
+        scopeId,
+        limit: 25,
+      });
+      existing = searchRows.map((row) => ({
+        id: row.id,
+        content: row.content,
+        memoryType: row.memory_type,
+        scopeType: row.scope_type,
+        sensitivity: row.sensitivity,
+        status: row.status,
+      }));
+    } catch {
+      existing = [];
+    }
+
+    if (existing.length === 0) {
+      const listed = await repo.listMemories(
+        prisma,
+        {
+          tenantId: auth.tenantId,
+          scopeType: requested.scopeType,
+          workspaceId: requested.workspaceId,
+          projectId: requested.projectId,
+          status: 'ACTIVE',
+          limit: 100,
+        },
+        null,
+      );
+      existing = listed.map((m) => ({
+        id: m.id,
+        content: m.content,
+        memoryType: m.memoryType,
+        scopeType: m.scopeType,
+        sensitivity: m.sensitivity,
+        status: m.status,
+      }));
+    }
+
+    const useDeterministicFallback =
+      input.metadata?.extractorMode === 'deterministic' ||
+      process.env.HARVESTER_MODE === 'deterministic';
+
+    const harvest = await agenticHarvester.harvest({
+      sourceText: input.sourceText,
+      sourceLocator: input.sourceUri ?? input.title ?? 'harvest-source',
+      relatedMemories: existing.map((m) => ({
+        id: m.id,
+        content: m.content,
+        memoryType: m.memoryType as MemoryType,
+        scopeType: m.scopeType as 'TENANT' | 'WORKSPACE' | 'PROJECT' | undefined,
+        sensitivity: m.sensitivity,
+        status: m.status,
+      })),
+      permissions: auth.permissions,
+      useDeterministicFallback: Boolean(useDeterministicFallback),
+    });
 
     // Analysis → Recommendations (candidates only; never silent memory write)
-    const extracted = extractCandidatesFromText(input.sourceText);
     const candidates = [];
-    for (const item of extracted) {
-      const analysis = analyzeCandidateAgainstMemories(
-        item.content,
-        item.memoryType,
-        existing.map((m) => ({
-          id: m.id,
-          content: m.content,
-          memoryType: m.memoryType,
-        })),
-      );
-      const recommendation = recommendationForAnalysisStatus(analysis.status);
+    for (const item of harvest.candidates) {
+      const status =
+        item.recommendedDisposition === 'CORRECT'
+          ? 'CONFLICT'
+          : item.recommendedDisposition === 'IGNORE' &&
+              item.analysisClassification === 'EXACT_DUPLICATE'
+            ? 'DUPLICATE'
+            : item.recommendedDisposition === 'MERGE'
+              ? 'NEAR_DUPLICATE'
+              : item.analysisClassification === 'UNRESOLVED_CONTRADICTION'
+                ? 'CONFLICT'
+                : 'PENDING';
+      const recommendation = item.recommendedDisposition.toLowerCase();
       const candidateMetadata = mergeMemoryMetadata({
         metadata: {
           ...item.metadata,
           harvestRecommendation: recommendation,
-          analysisStatus: analysis.status,
+          analysisStatus: status,
+          extractorMode: harvest.extractorMode,
+          reasoningProvider: harvest.providerName,
+          reasoningModelId: harvest.modelId,
         },
         icareStage: 'RECOMMENDATIONS',
         reasoningChainId,
-        relatedMemoryIds: analysis.relatedMemoryIds,
+        relatedMemoryIds: item.relatedMemoryIds,
       });
       const created = await repo.insertMemoryCandidate(prisma, {
         tenantId: auth.tenantId,
@@ -265,10 +358,10 @@ export async function createHarvestRun(
         scopeType: requested.scopeType,
         scopeId,
         memoryType: item.memoryType,
-        status: analysis.status,
+        status,
         content: item.content,
         confidence: item.confidence,
-        relatedMemoryIds: analysis.relatedMemoryIds,
+        relatedMemoryIds: item.relatedMemoryIds,
         metadata: candidateMetadata,
       });
       candidates.push(serializeCandidate(created));
@@ -284,6 +377,10 @@ export async function createHarvestRun(
           requestId: requestId ?? null,
           relatedMemoryCount: existing.length,
           icareLifecycle: ICARE_PUBLIC_LIFECYCLE,
+          extractorMode: harvest.extractorMode,
+          reasoningProvider: harvest.providerName,
+          reasoningModelId: harvest.modelId,
+          harvestRationale: harvest.rationale,
         },
         icareStage: 'ANALYSIS',
         reasoningChainId,
@@ -725,9 +822,24 @@ export async function publishArtifact(
 
   const reasoningChainId = resolveReasoningChainId(input.metadata, input.reasoningChainId ?? null);
 
+  const publishedContent =
+    input.artifactType === 'intelligence-brief' && !input.content.includes('ICARE³ lifecycle')
+      ? renderIntelligenceBrief({
+          title: input.title,
+          projectName: input.title,
+          memories: input.sourceMemoryIds.map((id) => ({
+            id,
+            content: '(see authoritative memory)',
+            memoryType: 'FACT',
+            icareStage: 'CONTEXT',
+          })),
+          reasoningChainId,
+        })
+      : input.content;
+
   const published = await stubDrive.publish({
     title: input.title,
-    content: input.content,
+    content: publishedContent,
     artifactType: input.artifactType,
     sourceMemoryIds: input.sourceMemoryIds,
     sourceRevisionIds: input.sourceRevisionIds,
@@ -750,7 +862,7 @@ export async function publishArtifact(
     parentFolderId: published.parentFolderId,
     artifactType: input.artifactType,
     title: input.title,
-    content: input.content,
+    content: publishedContent,
     sourceMemoryIds: input.sourceMemoryIds,
     sourceRevisionIds: input.sourceRevisionIds,
     lastSyncedContentHash: published.lastSyncedContentHash,

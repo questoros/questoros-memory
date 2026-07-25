@@ -2,7 +2,7 @@
   "name": "@questoros-memory/harvester-core",
   "version": "0.1.0",
   "private": true,
-  "description": "Deterministic organizational-intelligence extraction and candidate analysis",
+  "description": "Deterministic and model-backed organizational-intelligence harvest orchestration",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -12,7 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@questoros-memory/memory-core": "workspace:*"
+    "@questoros-memory/memory-core": "workspace:*",
+    "@questoros-memory/reasoning-provider": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
