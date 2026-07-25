@@ -57,7 +57,11 @@ This command does **not** deploy. It:
 3. bundles the real API with CDK `NodejsFunction`;
 4. copies the Prisma runtime into the Lambda asset;
 5. synthesizes CloudFormation;
-6. verifies the handler, runtime, secret reference, package size, and absence of inline placeholder or obvious secret material.
+6. verifies the real handler and Lambda package size;
+7. verifies the Lambda runtime, memory, timeout, and reserved concurrency;
+8. verifies the explicit 14-day log group and stack-scoped deletion policy;
+9. verifies five actionless CloudWatch alarms and API Gateway throttling;
+10. verifies that no inline placeholder or obvious secret material is present.
 
 The command requires Docker because bundling is forced into a Lambda-compatible build environment.
 
@@ -79,7 +83,7 @@ The command requires Docker because bundling is forced into a Lambda-compatible 
 
 Do not grant `bedrock:*`, AdministratorAccess, PowerUserAccess, streaming invocation, provisioned throughput, or batch jobs.
 
-## Safety controls
+## Safety and observability controls
 
 - `EMBEDDING_AUTO_ON_WRITE=false`
 - no historical backfill
@@ -88,14 +92,34 @@ Do not grant `bedrock:*`, AdministratorAccess, PowerUserAccess, streaming invoca
 - API Gateway stage throttling: 20 requests/second, burst 40
 - Lambda timeout: 30 seconds
 - Lambda memory: 1,024 MB
+- explicit log group: `/questoros-memory/staging/api`
 - CloudWatch log retention: 14 days
+- staging log group removal policy: `DESTROY`
 - application logs redact authorization headers, API keys, tokens, and `DATABASE_URL`
 - database secret read permission limited to the imported staging secret
 - AWS Parameters and Secrets extension cache TTL: 300 seconds
 - no permissive CORS
 - remote MCP is not deployed
 
-## Deployment gate
+The stack prepares five standard-resolution alarms without notification actions:
+
+```text
+Lambda errors
+Lambda throttles
+Lambda p95 duration ≥ 25 seconds for two periods
+HTTP API 5xx responses
+HTTP API p95 latency ≥ 25 seconds for two periods
+```
+
+Notification destinations remain an explicit deployment-time decision and are never committed to the repository.
+
+## Cost, budget, and teardown gate
+
+The reviewed estimate, required $5 monthly budget, secret-input rules, exact deployment command, exact stack-only teardown command, and teardown proof are documented in:
+
+```text
+docs/phase-6-aws-cost-and-teardown.md
+```
 
 The deployment command remains intentionally blocked:
 
@@ -103,14 +127,18 @@ The deployment command remains intentionally blocked:
 pnpm.cmd --filter @questoros-memory/aws-cdk deploy
 ```
 
-Before unblocking it, Phase 6 must publish and approve:
+## Read-only staging smoke test
 
-1. a monthly cost estimate;
-2. an AWS Budget alert plan;
-3. the exact secret-creation procedure without displaying its value;
-4. the exact stack-only teardown command;
-5. post-deployment smoke tests;
-6. confirmation that the endpoint will contain synthetic staging data only.
+The prepared smoke test remains blocked until an approved deployment:
+
+```powershell
+$env:RUN_PHASE6_STAGING_SMOKE="true"
+$env:QUESTOROS_MEMORY_STAGING_URL="https://<approved-staging-endpoint>/staging"
+$env:QUESTOROS_MEMORY_STAGING_API_KEY="<private staging key>"
+pnpm.cmd --filter @questoros-memory/aws-cdk smoke:staging
+```
+
+It checks health, database readiness, and authenticated identity only. It performs no writes, Bedrock calls, or external provider calls and prints no credentials or response bodies.
 
 Current boundaries:
 
