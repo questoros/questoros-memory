@@ -11,7 +11,7 @@ This document is the Checkpoint 10 plan only. It extends the Phase 4 prepare-onl
 1. Private/staging Memory API (API Gateway → Lambda or container) in `ap-southeast-1`
 2. Continuity Agent as a **separate** service (public REST / ICARE³ loop only; no DB security-group need). The agent never shares CockroachDB with Memory API — ICARE³ continuity is carried by Memory over REST.
 3. Secrets Manager for `DATABASE_URL` / API keys (never CloudFormation outputs or git)
-4. Optional later: gated Google Drive OAuth secrets for Publisher
+4. Optional later: gated Google Drive / Microsoft Graph OAuth secrets for Publisher
 5. Budgets + teardown runbook before any spend
 
 ---
@@ -42,7 +42,7 @@ Internet / private clients
       → No DATABASE_URL, no Prisma, no VPC DB access
 ```
 
-Publisher / Google Drive adapters stay opt-in and secret-gated. Live Drive preflight remains behind `RUN_LIVE_DRIVE_PREFLIGHT=true` and is never part of deploy or CI.
+Publisher / Google Drive / Microsoft Graph adapters stay opt-in and secret-gated. Live Drive preflight remains behind `RUN_LIVE_DRIVE_PREFLIGHT=true` / `RUN_LIVE_MICROSOFT_DRIVE_PREFLIGHT=true` and is never part of deploy or CI.
 
 ---
 
@@ -80,7 +80,7 @@ Until approval, `deploy` scripts must remain blocked or no-op with a clear messa
 ## Teardown runbook (execute after the experiment)
 
 1. Disable or rotate Memory API keys used by staging and Continuity Agent
-2. Revoke / disable Google Drive OAuth client credentials if any were created
+2. Revoke / disable Google Drive and Microsoft Graph OAuth client credentials if any were created
 3. Destroy application stacks only (do not touch unrelated accounts/resources):
 
 ```powershell
@@ -99,7 +99,7 @@ pnpm.cmd --filter @questoros-memory/aws-cdk exec -- cdk destroy --force
 - Production multi-region HA
 - Public unauthenticated endpoints
 - Deploying stdio MCP or unsecured remote MCP
-- OneDrive adapter production wiring
+- OneDrive / SharePoint production OAuth wiring (adapter + fakes shipped; live gated)
 - Billing / marketplace packaging
 - Any deploy from `pnpm test`, `pnpm build`, or CI without a dedicated approved workflow
 

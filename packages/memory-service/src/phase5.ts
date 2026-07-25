@@ -847,6 +847,8 @@ export async function publishArtifact(
     provider: input.provider,
     syncDirection: input.syncDirection,
     publishedBy: auth.actorId,
+    driveId: input.driveId ?? null,
+    siteId: input.siteId ?? null,
   });
 
   const artifact = await repo.insertPublishedArtifact(prisma, {
@@ -875,6 +877,9 @@ export async function publishArtifact(
         sourceMemoryIds: input.sourceMemoryIds,
         sourceRevisionIds: input.sourceRevisionIds,
         icareLifecycle: ICARE_PUBLIC_LIFECYCLE,
+        driveId: published.driveId ?? input.driveId ?? null,
+        siteId: published.siteId ?? input.siteId ?? null,
+        providerAccountBound: true,
       },
       icareStage: 'EXECUTION',
       reasoningChainId,

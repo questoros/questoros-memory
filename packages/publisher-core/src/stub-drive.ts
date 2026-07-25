@@ -16,6 +16,7 @@ import type {
   SyncDirection,
   UpdateDocumentInput,
 } from './types.js';
+import { assertShareLinkAllowed } from './types.js';
 
 function hashContent(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex');
@@ -37,6 +38,7 @@ export class StubDriveProvider implements DriveProvider, DocumentPublisher, Exte
   private readonly documents = new Map<string, DriveDocument>();
   private readonly changes: DriveChange[] = [];
   readonly providerName = 'stub';
+  readonly driveId = 'stub-drive';
 
   async createFolder(input: CreateFolderInput): Promise<DriveFolder> {
     await Promise.resolve();
@@ -44,6 +46,8 @@ export class StubDriveProvider implements DriveProvider, DocumentPublisher, Exte
       id: newId('folder'),
       name: input.name,
       parentFolderId: input.parentFolderId ?? null,
+      driveId: input.driveId ?? this.driveId,
+      siteId: input.siteId ?? null,
     };
     this.folders.set(folder.id, folder);
     return folder;
@@ -72,9 +76,17 @@ export class StubDriveProvider implements DriveProvider, DocumentPublisher, Exte
       mimeType: input.mimeType ?? 'text/markdown',
       modifiedAt: nowIso(),
       webViewLink: `stub://docs/${input.name}`,
+      driveId: input.driveId ?? this.driveId,
+      siteId: input.siteId ?? null,
     };
     this.documents.set(doc.id, doc);
-    this.changes.push({ fileId: doc.id, removed: false, modifiedAt: doc.modifiedAt });
+    this.changes.push({
+      fileId: doc.id,
+      removed: false,
+      modifiedAt: doc.modifiedAt,
+      driveId: doc.driveId,
+      siteId: doc.siteId,
+    });
     return doc;
   }
 
@@ -89,9 +101,17 @@ export class StubDriveProvider implements DriveProvider, DocumentPublisher, Exte
       content: input.content,
       name: input.name ?? existing.name,
       modifiedAt: nowIso(),
+      driveId: input.driveId ?? existing.driveId,
+      siteId: input.siteId ?? existing.siteId,
     };
     this.documents.set(updated.id, updated);
-    this.changes.push({ fileId: updated.id, removed: false, modifiedAt: updated.modifiedAt });
+    this.changes.push({
+      fileId: updated.id,
+      removed: false,
+      modifiedAt: updated.modifiedAt,
+      driveId: updated.driveId,
+      siteId: updated.siteId,
+    });
     return updated;
   }
 
@@ -125,6 +145,8 @@ export class StubDriveProvider implements DriveProvider, DocumentPublisher, Exte
         modifiedAt: doc.modifiedAt,
         webViewLink: doc.webViewLink ?? null,
         md5Checksum: hashContent(doc.content).slice(0, 32),
+        driveId: doc.driveId ?? this.driveId,
+        siteId: doc.siteId ?? null,
       };
     }
     const folder = this.folders.get(fileId);
@@ -137,15 +159,17 @@ export class StubDriveProvider implements DriveProvider, DocumentPublisher, Exte
         modifiedAt: nowIso(),
         webViewLink: null,
         md5Checksum: null,
+        driveId: folder.driveId ?? this.driveId,
+        siteId: folder.siteId ?? null,
       };
     }
     throw new Error(`StubDriveProvider: metadata not found: ${fileId}`);
   }
 
   async createShareLink(fileId: string, options?: ShareLinkOptions): Promise<string> {
-    void options;
+    const safe = assertShareLinkAllowed(options);
     const meta = await this.getMetadata(fileId);
-    return `stub://share/${meta.id}`;
+    return `stub://share/${meta.id}?scope=${safe.type ?? 'organization'}`;
   }
 
   async publish(input: PublishDocumentInput): Promise<PublishedArtifactMetadata> {
@@ -154,10 +178,14 @@ export class StubDriveProvider implements DriveProvider, DocumentPublisher, Exte
       content: input.content,
       parentFolderId: input.parentFolderId,
       mimeType: 'text/markdown',
+      driveId: input.driveId ?? this.driveId,
+      siteId: input.siteId ?? null,
     });
     const syncDirection: SyncDirection = input.syncDirection ?? 'BIDIRECTIONAL_REVIEWED';
     return {
       provider: input.provider ?? this.providerName,
+      driveId: doc.driveId ?? this.driveId,
+      siteId: doc.siteId ?? null,
       externalFileId: doc.id,
       externalUrl: doc.webViewLink ?? null,
       parentFolderId: doc.parentFolderId,
@@ -178,9 +206,16 @@ export class StubDriveProvider implements DriveProvider, DocumentPublisher, Exte
     metadata: PublishedArtifactMetadata,
     content: string,
   ): Promise<PublishedArtifactMetadata> {
-    const doc = await this.updateDocument({ fileId: metadata.externalFileId, content });
+    const doc = await this.updateDocument({
+      fileId: metadata.externalFileId,
+      content,
+      driveId: metadata.driveId,
+      siteId: metadata.siteId,
+    });
     return {
       ...metadata,
+      driveId: doc.driveId ?? metadata.driveId ?? this.driveId,
+      siteId: doc.siteId ?? metadata.siteId ?? null,
       lastExternalModifiedAt: doc.modifiedAt,
       lastSyncedContentHash: hashContent(content),
       syncStatus: 'REPUBLISHED',

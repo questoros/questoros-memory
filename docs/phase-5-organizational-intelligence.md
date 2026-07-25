@@ -90,6 +90,7 @@ Hard isolation: `apps/continuity-agent` depends on `@questoros-memory/sdk` only.
 - External edits → harvest candidates (never silent overwrite)
 - `SYNC_CONFLICT` when both sides changed
 - Phase 5B: `renderIntelligenceBrief` + fake Drive remain CI-safe (no live Drive calls)
+- Multi-drive: Google Drive + Microsoft OneDrive/SharePoint share `DriveProvider` / `DocumentPublisher` / `ExternalChangeReader`; live OAuth gated
 
 ### Phase 5B — Real agentic Harvester
 
@@ -107,14 +108,18 @@ Hard isolation: `apps/continuity-agent` depends on `@questoros-memory/sdk` only.
 
 ## Packages
 
-| Package                                | Role                                               |
-| -------------------------------------- | -------------------------------------------------- |
-| `@questoros-memory/reasoning-provider` | Structured agentic reasoning contracts + mock      |
-| `@questoros-memory/harvester-core`     | Deterministic + model-backed harvest orchestration |
-| `@questoros-memory/publisher-core`     | Drive/publisher interfaces, brief renderer, stub   |
-| `@questoros-memory/drive-google`       | Google Drive adapter (live gated)                  |
-| `@questoros-memory/sdk`                | Public REST client                                 |
-| `@questoros-memory/continuity-agent`   | Reference ICARE³ agent (deterministic + model)     |
+| Package                                | Role                                                              |
+| -------------------------------------- | ----------------------------------------------------------------- |
+| `@questoros-memory/reasoning-provider` | Structured agentic reasoning contracts + mock                     |
+| `@questoros-memory/harvester-core`     | Deterministic + model-backed harvest orchestration                |
+| `@questoros-memory/publisher-core`     | Provider-neutral Drive/publisher interfaces, brief renderer, stub |
+| `@questoros-memory/drive-google`       | Google Drive adapter (live gated)                                 |
+| `@questoros-memory/drive-microsoft`    | OneDrive / SharePoint Graph adapter (live gated)                  |
+| `@questoros-memory/sdk`                | Public REST client                                                |
+| `@questoros-memory/continuity-agent`   | Reference ICARE³ agent (deterministic + model)                    |
+
+Canonical publisher providers: `google-drive`, `microsoft-onedrive`, `microsoft-sharepoint` (plus `stub` for CI).
+Organizational-intelligence logic never imports Google- or Microsoft-specific packages.
 
 ---
 

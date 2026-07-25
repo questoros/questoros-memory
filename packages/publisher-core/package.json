@@ -2,7 +2,7 @@
   "name": "@questoros-memory/publisher-core",
   "version": "0.1.0",
   "private": true,
-  "description": "Provider-neutral Drive publisher contracts and in-memory stub provider",
+  "description": "Provider-neutral Drive publisher contracts for Google Drive, OneDrive, and SharePoint",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {

@@ -31,6 +31,10 @@ export default defineConfig({
         __dirname,
         'packages/drive-google/src/index.ts',
       ),
+      '@questoros-memory/drive-microsoft': path.resolve(
+        __dirname,
+        'packages/drive-microsoft/src/index.ts',
+      ),
       '@questoros-memory/sdk': path.resolve(__dirname, 'packages/sdk-typescript/src/index.ts'),
     },
   },

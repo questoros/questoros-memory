@@ -711,8 +711,12 @@ export const publishArtifactRequestSchema = z
     content: contentStringSchema('content'),
     sourceMemoryIds: z.array(uuidSchema).max(MAX_RELATED_MEMORY_IDS).default([]),
     sourceRevisionIds: z.array(uuidSchema).max(MAX_RELATED_MEMORY_IDS).default([]),
-    provider: z.enum(['stub', 'google-drive']).default('stub'),
+    provider: z
+      .enum(['stub', 'google-drive', 'microsoft-onedrive', 'microsoft-sharepoint'])
+      .default('stub'),
     parentFolderId: z.string().trim().max(512).optional(),
+    driveId: z.string().trim().max(512).optional(),
+    siteId: z.string().trim().max(512).optional(),
     syncDirection: syncDirectionSchema.default('BIDIRECTIONAL_REVIEWED'),
     reasoningChainId: uuidSchema.optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
@@ -779,8 +783,12 @@ export const publishArtifactToolShape = {
   title: titleSchema,
   content: z.string().min(1),
   sourceMemoryIds: z.array(uuidSchema).optional(),
-  provider: z.enum(['stub', 'google-drive']).optional(),
+  provider: z
+    .enum(['stub', 'google-drive', 'microsoft-onedrive', 'microsoft-sharepoint'])
+    .optional(),
   syncDirection: syncDirectionSchema.optional(),
+  driveId: z.string().optional(),
+  siteId: z.string().optional(),
 } as const;
 
 export const syncArtifactToolShape = {
