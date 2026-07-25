@@ -2,6 +2,7 @@ import path from 'node:path';
 import * as cdk from 'aws-cdk-lib';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -13,11 +14,35 @@ import { Construct } from 'constructs';
 const DEPLOYMENT_REGION = 'ap-southeast-1';
 const BEDROCK_REGION = 'us-west-2';
 const DATABASE_SECRET_NAME = 'questoros-memory/staging/database-url';
-const TITAN_MODEL_ARN = 'arn:aws:bedrock:us-west-2::foundation-model/amazon.titan-embed-text-v2:0';
+const FUNCTION_NAME = 'questoros-memory-staging-api';
+const LOG_GROUP_NAME = '/questoros-memory/staging/api';
+const TITAN_MODEL_ARN =
+  'arn:aws:bedrock:us-west-2::foundation-model/amazon.titan-embed-text-v2:0';
 const PARAMETERS_SECRETS_EXTENSION_PARAMETER =
   '/aws/service/aws-parameters-and-secrets-lambda-extension/x86/latest';
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
+const fiveMinutes = cdk.Duration.minutes(5);
+
+function standardAlarmProps(
+  alarmName: string,
+  alarmDescription: string,
+): Pick<
+  cloudwatch.AlarmProps,
+  | 'alarmName'
+  | 'alarmDescription'
+  | 'comparisonOperator'
+  | 'treatMissingData'
+  | 'actionsEnabled'
+> {
+  return {
+    alarmName,
+    alarmDescription,
+    comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+    treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    actionsEnabled: true,
+  };
+}
 
 /**
  * QuestorOS Memory staging infrastructure.
@@ -50,8 +75,14 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
       extensionLayerArn,
     );
 
+    const logGroup = new logs.LogGroup(this, 'MemoryApiLogGroup', {
+      logGroupName: LOG_GROUP_NAME,
+      retention: logs.RetentionDays.TWO_WEEKS,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
     const fn = new nodejs.NodejsFunction(this, 'MemoryApiFunction', {
-      functionName: 'questoros-memory-staging-api',
+      functionName: FUNCTION_NAME,
       description: 'QuestorOS Memory staging REST API',
       runtime: lambda.Runtime.NODEJS_24_X,
       architecture: lambda.Architecture.X86_64,
@@ -76,6 +107,7 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
         },
       },
       layers: [extensionLayer],
+      logGroup,
       memorySize: 1024,
       timeout: cdk.Duration.seconds(30),
       reservedConcurrentExecutions: 5,
@@ -94,7 +126,6 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
         SECRETS_MANAGER_TTL: '300',
         PARAMETERS_SECRETS_EXTENSION_LOG_LEVEL: 'WARN',
       },
-      logRetention: logs.RetentionDays.TWO_WEEKS,
     });
 
     dbSecret.grantRead(fn);
@@ -113,7 +144,10 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
       createDefaultStage: false,
     });
 
-    const integration = new integrations.HttpLambdaIntegration('MemoryLambdaIntegration', fn);
+    const integration = new integrations.HttpLambdaIntegration(
+      'MemoryLambdaIntegration',
+      fn,
+    );
     httpApi.addRoutes({
       path: '/{proxy+}',
       methods: [apigwv2.HttpMethod.ANY],
@@ -125,7 +159,7 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
       integration,
     });
 
-    new apigwv2.HttpStage(this, 'StagingStage', {
+    const stage = new apigwv2.HttpStage(this, 'StagingStage', {
       httpApi,
       stageName: 'staging',
       autoDeploy: true,
@@ -134,6 +168,76 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
         burstLimit: 40,
       },
     });
+
+    fn.metricErrors({ period: fiveMinutes, statistic: 'Sum' }).createAlarm(
+      this,
+      'MemoryApiErrorsAlarm',
+      {
+        ...standardAlarmProps(
+          'questoros-memory-staging-lambda-errors',
+          'QuestorOS Memory staging Lambda reported one or more errors in five minutes.',
+        ),
+        threshold: 1,
+        evaluationPeriods: 1,
+        datapointsToAlarm: 1,
+      },
+    );
+
+    fn.metricThrottles({ period: fiveMinutes, statistic: 'Sum' }).createAlarm(
+      this,
+      'MemoryApiThrottlesAlarm',
+      {
+        ...standardAlarmProps(
+          'questoros-memory-staging-lambda-throttles',
+          'QuestorOS Memory staging Lambda was throttled.',
+        ),
+        threshold: 1,
+        evaluationPeriods: 1,
+        datapointsToAlarm: 1,
+      },
+    );
+
+    fn.metricDuration({ period: fiveMinutes, statistic: 'p95' }).createAlarm(
+      this,
+      'MemoryApiDurationAlarm',
+      {
+        ...standardAlarmProps(
+          'questoros-memory-staging-lambda-duration-p95',
+          'QuestorOS Memory staging Lambda p95 duration approached its timeout.',
+        ),
+        threshold: 25_000,
+        evaluationPeriods: 2,
+        datapointsToAlarm: 2,
+      },
+    );
+
+    stage.metricServerError({ period: fiveMinutes, statistic: 'Sum' }).createAlarm(
+      this,
+      'MemoryApiGatewayServerErrorAlarm',
+      {
+        ...standardAlarmProps(
+          'questoros-memory-staging-api-5xx',
+          'QuestorOS Memory staging HTTP API returned one or more 5xx responses.',
+        ),
+        threshold: 1,
+        evaluationPeriods: 1,
+        datapointsToAlarm: 1,
+      },
+    );
+
+    stage.metricLatency({ period: fiveMinutes, statistic: 'p95' }).createAlarm(
+      this,
+      'MemoryApiGatewayLatencyAlarm',
+      {
+        ...standardAlarmProps(
+          'questoros-memory-staging-api-latency-p95',
+          'QuestorOS Memory staging HTTP API p95 latency exceeded 25 seconds.',
+        ),
+        threshold: 25_000,
+        evaluationPeriods: 2,
+        datapointsToAlarm: 2,
+      },
+    );
 
     new cdk.CfnOutput(this, 'DeploymentRegion', {
       value: DEPLOYMENT_REGION,
