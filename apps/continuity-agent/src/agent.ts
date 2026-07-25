@@ -2,6 +2,12 @@ import { MemoryApiClient, type FetchLike } from '@questoros-memory/sdk';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import {
+  DeterministicContinuityPolicy,
+  ModelDirectedContinuityPolicy,
+  type ContinuityPolicy,
+  type ContinuityPolicyWorkspace,
+} from './policy.js';
 
 export type MemoryToolName =
   'memory_search' | 'memory_create' | 'memory_correct' | 'memory_history';
@@ -31,6 +37,8 @@ export interface ContinuityAgentOptions {
   maxSteps?: number;
   sessionId?: string;
   agentRunId?: string;
+  /** Optional policy. Defaults to deterministic; inject model-directed for Phase 5B. */
+  policy?: ContinuityPolicy;
 }
 
 export interface ContinuityAgentInput {
@@ -52,43 +60,7 @@ export interface ContinuityAgentResult {
   artifacts: string[];
   checkpointMemoryId: string | null;
   summary: string;
-}
-
-interface AgentWorkspace {
-  goal: string;
-  correction?: string;
-  correctionMemoryId?: string;
-  continueProject: boolean;
-  sessionId: string;
-  agentRunId: string;
-  /** ICARE³ reasoning chain id — shared across all memories in this run. */
-  reasoningChainId: string;
-  searched: boolean;
-  createdMemoryIds: string[];
-  correctedMemoryId: string | null;
-  historyFetched: boolean;
-  artifactPaths: string[];
-  checkpointMemoryId: string | null;
-  evaluationMemoryId: string | null;
-  completed: boolean;
-  lastSearchHits: Array<{ id: string; content: string; memoryType?: string }>;
-}
-
-function agentBaseMetadata(
-  workspace: AgentWorkspace,
-  icareStage: string,
-  extra: Record<string, unknown> = {},
-): Record<string, unknown> {
-  return {
-    source: 'continuity-agent',
-    agentRunId: workspace.agentRunId,
-    sessionId: workspace.sessionId,
-    icare: {
-      icareStage,
-      reasoningChainId: workspace.reasoningChainId,
-    },
-    ...extra,
-  };
+  policyName: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -136,46 +108,51 @@ function extractHits(
   return hits;
 }
 
-function findLaunchDateHit(
-  hits: Array<{ id: string; content: string }>,
-): { id: string; content: string } | null {
-  return hits.find((hit) => /launch date/i.test(hit.content)) ?? null;
+/**
+ * Backward-compatible synchronous chooser using the deterministic policy.
+ * Prefer ContinuityAgent with an injected ContinuityPolicy for new code.
+ */
+export function chooseNextTool(
+  workspace: Omit<ContinuityPolicyWorkspace, 'priorObservations' | 'remainingStepBudget'> & {
+    priorObservations?: ContinuityPolicyWorkspace['priorObservations'];
+    remainingStepBudget?: number;
+  },
+): ToolCall | null {
+  const enriched: ContinuityPolicyWorkspace = {
+    ...workspace,
+    priorObservations: workspace.priorObservations ?? [],
+    remainingStepBudget: workspace.remainingStepBudget ?? 12,
+  };
+  return syncDeterministicChoose(enriched);
 }
 
-/**
- * Choose the next tool from workspace state — never from step index alone.
- * Maps onto ICARE³: Issue → Context → Analysis → Recommendations → Evaluation → Execution → Evaluation.
- */
-export function chooseNextTool(workspace: AgentWorkspace): ToolCall | null {
-  if (workspace.completed) {
-    return null;
-  }
+function toPolicyWorkspace(workspace: ContinuityPolicyWorkspace): ContinuityPolicyWorkspace {
+  return workspace;
+}
 
-  // CONTEXT — recall prior organizational intelligence
-  if (workspace.continueProject && !workspace.searched) {
+function syncDeterministicChoose(workspace: ContinuityPolicyWorkspace): ToolCall | null {
+  // Inline the deterministic decision for synchronous chooseNextTool compatibility.
+  if (workspace.completed || workspace.remainingStepBudget <= 0) return null;
+
+  if (!workspace.searched) {
     return {
       tool: 'memory_search',
       args: {
-        query: workspace.goal || 'Continue the launch project',
+        query: workspace.continueProject
+          ? workspace.goal || 'Continue the launch project'
+          : workspace.goal,
         limit: 10,
-        reasoningChainId: workspace.reasoningChainId,
+        ...(workspace.continueProject ? { reasoningChainId: workspace.reasoningChainId } : {}),
       },
       reason: 'ICARE³ Context: recall prior project memories before acting.',
     };
   }
 
-  if (!workspace.continueProject && !workspace.searched) {
-    return {
-      tool: 'memory_search',
-      args: { query: workspace.goal, limit: 10 },
-      reason: 'ICARE³ Context: search existing memory before creating new facts.',
-    };
-  }
-
-  // RECOMMENDATIONS → RECOMMENDATION_EVALUATION via correction path
   if (workspace.correction && !workspace.correctedMemoryId) {
     const target =
-      workspace.correctionMemoryId ?? findLaunchDateHit(workspace.lastSearchHits)?.id ?? null;
+      workspace.correctionMemoryId ??
+      workspace.lastSearchHits.find((h) => /launch date|deadline|closing/i.test(h.content))?.id ??
+      null;
     if (!target) {
       return {
         tool: 'memory_search',
@@ -215,7 +192,6 @@ export function chooseNextTool(workspace: AgentWorkspace): ToolCall | null {
     };
   }
 
-  // ISSUE → CONTEXT durable goal
   if (!workspace.continueProject && workspace.createdMemoryIds.length === 0) {
     return {
       tool: 'memory_create',
@@ -224,69 +200,52 @@ export function chooseNextTool(workspace: AgentWorkspace): ToolCall | null {
         memoryType: 'GOAL',
         icareStage: 'ISSUE',
         reasoningChainId: workspace.reasoningChainId,
-        metadata: agentBaseMetadata(workspace, 'ISSUE', {
+        metadata: {
+          source: 'continuity-agent',
+          agentRunId: workspace.agentRunId,
+          sessionId: workspace.sessionId,
+          icare: { icareStage: 'ISSUE', reasoningChainId: workspace.reasoningChainId },
           createdByTool: 'memory_create',
-        }),
+        },
       },
       reason: 'ICARE³ Issue: persist the durable project goal.',
     };
   }
 
-  // EXECUTION — non-memory artifact
-  if (workspace.continueProject && workspace.searched && workspace.artifactPaths.length === 0) {
+  if (workspace.artifactPaths.length === 0) {
     const launch =
-      findLaunchDateHit(workspace.lastSearchHits)?.content ?? 'Launch date: (from memory)';
+      workspace.lastSearchHits.find((h) => /launch date|deadline|closing/i.test(h.content))
+        ?.content ??
+      (workspace.continueProject
+        ? 'Launch date: (from memory)'
+        : 'Constraints and facts will be loaded from QuestorOS Memory on the next session.');
     const constraint =
       workspace.lastSearchHits.find((h) => /no paid advertising|constraint/i.test(h.content))
         ?.content ?? 'Constraint: no paid advertising';
     return {
       tool: 'artifact_write',
       args: {
-        filename: `launch-next-${workspace.sessionId}.md`,
+        filename: workspace.continueProject
+          ? `launch-next-${workspace.sessionId}.md`
+          : `launch-plan-${workspace.sessionId}.md`,
         content: [
-          '# Next Launch Action',
-          '',
-          `ICARE³ lifecycle: Issue → Context → Analysis → Recommendations → Evaluation → Execution → Evaluation`,
+          workspace.continueProject ? '# Next Launch Action' : '# Product Launch Plan',
           '',
           `Goal: ${workspace.goal}`,
           launch,
-          constraint,
-          '',
-          'Next action: draft channel plan without paid ads.',
+          workspace.continueProject ? constraint : '',
           '',
           `Session: ${workspace.sessionId}`,
           `Reasoning chain: ${workspace.reasoningChainId}`,
-        ].join('\n'),
+        ]
+          .filter(Boolean)
+          .join('\n'),
       },
-      reason: 'ICARE³ Execution: produce the next non-memory artifact from recalled context.',
+      reason: 'ICARE³ Execution: produce a non-memory artifact.',
     };
   }
 
-  if (
-    !workspace.continueProject &&
-    workspace.createdMemoryIds.length > 0 &&
-    workspace.artifactPaths.length === 0
-  ) {
-    return {
-      tool: 'artifact_write',
-      args: {
-        filename: `launch-plan-${workspace.sessionId}.md`,
-        content: [
-          '# Product Launch Plan',
-          '',
-          workspace.goal,
-          '',
-          'Constraints and facts will be loaded from QuestorOS Memory on the next session.',
-          '',
-          `Session: ${workspace.sessionId}`,
-          `Reasoning chain: ${workspace.reasoningChainId}`,
-        ].join('\n'),
-      },
-      reason: 'ICARE³ Execution: create a launch plan artifact (non-memory action).',
-    };
-  }
-
-  if (workspace.artifactPaths.length > 0 && !workspace.checkpointMemoryId) {
+  if (!workspace.checkpointMemoryId) {
     return {
       tool: 'project_checkpoint',
       args: {
@@ -294,19 +253,21 @@ export function chooseNextTool(workspace: AgentWorkspace): ToolCall | null {
         memoryType: 'CHECKPOINT',
         icareStage: 'EXECUTION',
         reasoningChainId: workspace.reasoningChainId,
-        metadata: agentBaseMetadata(workspace, 'EXECUTION', {
+        metadata: {
+          source: 'continuity-agent',
+          agentRunId: workspace.agentRunId,
+          sessionId: workspace.sessionId,
+          icare: { icareStage: 'EXECUTION', reasoningChainId: workspace.reasoningChainId },
           artifactId: workspace.artifactPaths[0],
-          taskStatus: 'in_progress',
           createdByTool: 'project_checkpoint',
           executionStatus: 'checkpointed',
-        }),
+        },
       },
       reason: 'ICARE³ Execution: store a checkpoint for the next agent run.',
     };
   }
 
-  // EXECUTION_EVALUATION — outcome + lesson
-  if (workspace.checkpointMemoryId && !workspace.evaluationMemoryId) {
+  if (!workspace.evaluationMemoryId) {
     return {
       tool: 'memory_create',
       args: {
@@ -322,30 +283,30 @@ export function chooseNextTool(workspace: AgentWorkspace): ToolCall | null {
           'Corrections must preserve revision history.',
           'Session continuity depends on QuestorOS Memory, not chat history.',
         ],
-        metadata: agentBaseMetadata(workspace, 'EXECUTION_EVALUATION', {
+        metadata: {
+          source: 'continuity-agent',
+          agentRunId: workspace.agentRunId,
+          sessionId: workspace.sessionId,
+          icare: {
+            icareStage: 'EXECUTION_EVALUATION',
+            reasoningChainId: workspace.reasoningChainId,
+          },
           createdByTool: 'memory_create',
-          relatedMemoryIds: [...workspace.createdMemoryIds, workspace.checkpointMemoryId].filter(
-            Boolean,
-          ),
-        }),
+        },
       },
       reason: 'ICARE³ Execution Evaluation: capture outcome and lessons.',
     };
   }
 
-  if (workspace.checkpointMemoryId && workspace.evaluationMemoryId && !workspace.completed) {
-    return {
-      tool: 'task_complete',
-      args: {
-        summary: workspace.continueProject
-          ? 'ICARE³ complete: continued launch project from memory, wrote next artifact + checkpoint + evaluation.'
-          : 'ICARE³ complete: stored goal, wrote launch plan, checkpoint, and post-execution evaluation.',
-      },
-      reason: 'Stop the loop after durable ICARE³ results are stored.',
-    };
-  }
-
-  return null;
+  return {
+    tool: 'task_complete',
+    args: {
+      summary: workspace.continueProject
+        ? 'ICARE³ complete: continued launch project from memory, wrote next artifact + checkpoint + evaluation.'
+        : 'ICARE³ complete: stored goal, wrote launch plan, checkpoint, and post-execution evaluation.',
+    },
+    reason: 'Stop the loop after durable ICARE³ results are stored.',
+  };
 }
 
 export class ContinuityAgent {
@@ -354,6 +315,7 @@ export class ContinuityAgent {
   private readonly maxSteps: number;
   private readonly sessionId: string;
   private readonly agentRunId: string;
+  private readonly policy: ContinuityPolicy;
 
   constructor(options: ContinuityAgentOptions) {
     this.client = new MemoryApiClient({
@@ -365,11 +327,12 @@ export class ContinuityAgent {
     this.maxSteps = options.maxSteps ?? 12;
     this.sessionId = options.sessionId ?? `session-${Date.now()}`;
     this.agentRunId = options.agentRunId ?? `run-${Date.now()}`;
+    this.policy = options.policy ?? new DeterministicContinuityPolicy();
   }
 
   async run(input: ContinuityAgentInput): Promise<ContinuityAgentResult> {
     const reasoningChainId = randomUUID();
-    const workspace: AgentWorkspace = {
+    const workspace: ContinuityPolicyWorkspace = {
       goal: input.goal,
       correction: input.correction,
       correctionMemoryId: input.correctionMemoryId,
@@ -386,16 +349,24 @@ export class ContinuityAgent {
       evaluationMemoryId: null,
       completed: false,
       lastSearchHits: [],
+      priorObservations: [],
+      remainingStepBudget: this.maxSteps,
     };
 
     const steps: ContinuityAgentResult['steps'] = [];
 
     for (let i = 0; i < this.maxSteps; i += 1) {
-      const call = chooseNextTool(workspace);
+      workspace.remainingStepBudget = this.maxSteps - i;
+      const call = await this.policy.chooseNextTool(toPolicyWorkspace(workspace));
       if (!call) {
         break;
       }
       const observation = await this.executeTool(call, workspace);
+      workspace.priorObservations.push({
+        tool: call.tool,
+        ok: observation.ok,
+        summary: observation.ok ? `${call.tool} ok` : `${call.tool} failed`,
+      });
       steps.push({ call, observation });
       if (workspace.completed) {
         break;
@@ -412,10 +383,14 @@ export class ContinuityAgent {
       summary:
         steps.find((s) => s.call.tool === 'task_complete')?.call.args.summary?.toString() ??
         'Agent stopped without task_complete.',
+      policyName: this.policy.name,
     };
   }
 
-  private async executeTool(call: ToolCall, workspace: AgentWorkspace): Promise<ToolObservation> {
+  private async executeTool(
+    call: ToolCall,
+    workspace: ContinuityPolicyWorkspace,
+  ): Promise<ToolObservation> {
     try {
       switch (call.tool) {
         case 'memory_search': {
@@ -492,11 +467,19 @@ export class ContinuityAgent {
             memoryType: 'ARTIFACT_SUMMARY',
             icareStage: 'EXECUTION',
             reasoningChainId: workspace.reasoningChainId,
-            metadata: agentBaseMetadata(workspace, 'EXECUTION', {
+            metadata: {
+              source: 'continuity-agent',
+              agentRunId: workspace.agentRunId,
+              sessionId: workspace.sessionId,
+              icare: {
+                icareStage: 'EXECUTION',
+                reasoningChainId: workspace.reasoningChainId,
+              },
               artifactId: fullPath,
               createdByTool: 'artifact_write',
               executionStatus: 'artifact_written',
-            }),
+              policy: this.policy.name,
+            },
           });
           return { tool: call.tool, ok: true, result: { path: fullPath, memory: summary } };
         }
@@ -507,7 +490,17 @@ export class ContinuityAgent {
             icareStage:
               typeof call.args.icareStage === 'string' ? call.args.icareStage : 'EXECUTION',
             reasoningChainId: workspace.reasoningChainId,
-            metadata: call.args.metadata ?? agentBaseMetadata(workspace, 'EXECUTION'),
+            metadata:
+              call.args.metadata ??
+              ({
+                source: 'continuity-agent',
+                agentRunId: workspace.agentRunId,
+                sessionId: workspace.sessionId,
+                icare: {
+                  icareStage: 'EXECUTION',
+                  reasoningChainId: workspace.reasoningChainId,
+                },
+              } as Record<string, unknown>),
           });
           const memory = asRecord(asRecord(result).memory ?? result);
           const id = typeof memory.id === 'string' ? memory.id : null;
@@ -532,3 +525,6 @@ export class ContinuityAgent {
     }
   }
 }
+
+export { DeterministicContinuityPolicy, ModelDirectedContinuityPolicy };
+export type { ContinuityPolicy, ContinuityPolicyWorkspace };
