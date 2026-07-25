@@ -7,9 +7,6 @@ on:
       - main
       - 'feat/**'
 
-permissions:
-  contents: write
-
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -17,8 +14,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -40,55 +35,20 @@ jobs:
       - name: Build packages
         run: pnpm exec turbo run build --filter=./packages/*
 
-      - name: Format Phase 6 files
-        run: |
-          pnpm exec prettier --write \
-            .github/workflows/ci.yml \
-            .github/workflows/phase6-format.yml \
-            infra/aws-cdk/README.md \
-            infra/aws-cdk/package.json \
-            infra/aws-cdk/src/app.ts \
-            infra/aws-cdk/scripts/copy-prisma-runtime.mjs \
-            infra/aws-cdk/scripts/prepare-prisma-runtime.mjs \
-            infra/aws-cdk/scripts/synth.mjs \
-            infra/aws-cdk/scripts/verify-assembly.mjs \
-            services/memory-api/src/index.ts \
-            services/memory-api/src/lambda.ts \
-            services/memory-api/tests/lambda.test.ts
+      - name: Format check
+        run: pnpm format:check
 
-      - name: Commit canonical formatting
-        continue-on-error: true
-        if: github.event.pull_request.head.ref == 'feat/phase-6-aws-memory-api-runtime' || github.ref_name == 'feat/phase-6-aws-memory-api-runtime'
-        run: |
-          git config user.name "questoros-ci"
-          git config user.email "actions@users.noreply.github.com"
-          git add .github/workflows/ci.yml .github/workflows/phase6-format.yml infra/aws-cdk services/memory-api/src services/memory-api/tests/lambda.test.ts
-          if git diff --cached --quiet; then
-            echo "No formatting changes required."
-          else
-            git commit -m "style(phase6): format AWS runtime changes"
-            git push origin HEAD:feat/phase-6-aws-memory-api-runtime
-          fi
+      - name: Lint
+        run: pnpm lint
 
-      - name: Run validation diagnostics
-        shell: bash
-        run: |
-          mkdir -p diagnostics
-          set +e
-          pnpm lint > diagnostics/lint.log 2>&1
-          echo $? > diagnostics/lint.exit
-          pnpm typecheck > diagnostics/typecheck.log 2>&1
-          echo $? > diagnostics/typecheck.exit
-          pnpm test > diagnostics/test.log 2>&1
-          echo $? > diagnostics/test.exit
-          pnpm build > diagnostics/build.log 2>&1
-          echo $? > diagnostics/build.exit
-          pnpm --filter @questoros-memory/aws-cdk synth > diagnostics/synth.log 2>&1
-          echo $? > diagnostics/synth.exit
-          set -e
+      - name: Typecheck
+        run: pnpm typecheck
 
-      - name: Upload validation diagnostics
-        uses: actions/upload-artifact@v6
-        with:
-          name: phase6-validation-diagnostics
-          path: diagnostics
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Synthesize and verify AWS staging package
+        run: pnpm --filter @questoros-memory/aws-cdk synth
