@@ -34,7 +34,9 @@ const indexAssets = files.filter(
 );
 const handlerCandidates = indexAssets.filter((file) => {
   const source = fs.readFileSync(file, 'utf8');
-  return source.includes('RUNTIME_NOT_READY') && source.includes('Memory API runtime is not ready.');
+  return (
+    source.includes('RUNTIME_NOT_READY') && source.includes('Memory API runtime is not ready.')
+  );
 });
 if (handlerCandidates.length !== 1) {
   fail(
