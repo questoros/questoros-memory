@@ -39,6 +39,13 @@ export interface ContinuityAgentOptions {
   agentRunId?: string;
   /** Optional policy. Defaults to deterministic; inject model-directed for Phase 5B. */
   policy?: ContinuityPolicy;
+  /**
+   * Default memory scope for SDK writes/searches.
+   * Required against the real API (create/search contracts require scopeType).
+   */
+  scopeType?: 'TENANT' | 'WORKSPACE' | 'PROJECT';
+  workspaceId?: string;
+  projectId?: string;
 }
 
 export interface ContinuityAgentInput {
@@ -316,6 +323,11 @@ export class ContinuityAgent {
   private readonly sessionId: string;
   private readonly agentRunId: string;
   private readonly policy: ContinuityPolicy;
+  private readonly defaultScope: {
+    scopeType: 'TENANT' | 'WORKSPACE' | 'PROJECT';
+    workspaceId?: string;
+    projectId?: string;
+  };
 
   constructor(options: ContinuityAgentOptions) {
     this.client = new MemoryApiClient({
@@ -328,6 +340,20 @@ export class ContinuityAgent {
     this.sessionId = options.sessionId ?? `session-${Date.now()}`;
     this.agentRunId = options.agentRunId ?? `run-${Date.now()}`;
     this.policy = options.policy ?? new DeterministicContinuityPolicy();
+    this.defaultScope = {
+      scopeType: options.scopeType ?? 'PROJECT',
+      ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
+      ...(options.projectId ? { projectId: options.projectId } : {}),
+    };
+  }
+
+  private scopedBody(extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      scopeType: this.defaultScope.scopeType,
+      ...(this.defaultScope.workspaceId ? { workspaceId: this.defaultScope.workspaceId } : {}),
+      ...(this.defaultScope.projectId ? { projectId: this.defaultScope.projectId } : {}),
+      ...extra,
+    };
   }
 
   async run(input: ContinuityAgentInput): Promise<ContinuityAgentResult> {
@@ -396,23 +422,26 @@ export class ContinuityAgent {
         case 'memory_search': {
           const query = String(call.args.query ?? workspace.goal);
           const limit = typeof call.args.limit === 'number' ? call.args.limit : 10;
-          const result = await this.client.searchMemories({
-            queryText: query,
-            limit,
-            ...(typeof call.args.reasoningChainId === 'string'
-              ? { reasoningChainId: call.args.reasoningChainId }
-              : {}),
-          });
+          const result = await this.client.searchMemories(
+            this.scopedBody({
+              queryText: query,
+              limit,
+              // Only filter by chain when explicitly requested and not continuing a prior project.
+              ...(!workspace.continueProject && typeof call.args.reasoningChainId === 'string'
+                ? { reasoningChainId: call.args.reasoningChainId }
+                : {}),
+            }),
+          );
           workspace.searched = true;
           workspace.lastSearchHits = extractHits(result);
           return { tool: call.tool, ok: true, result };
         }
         case 'memory_create': {
-          const body: Record<string, unknown> = {
+          const body = this.scopedBody({
             content: String(call.args.content ?? ''),
             memoryType: String(call.args.memoryType ?? 'FACT'),
             metadata: call.args.metadata ?? {},
-          };
+          });
           if (typeof call.args.icareStage === 'string') body.icareStage = call.args.icareStage;
           if (typeof call.args.reasoningChainId === 'string') {
             body.reasoningChainId = call.args.reasoningChainId;
@@ -462,37 +491,13 @@ export class ContinuityAgent {
           await writeFile(fullPath, String(call.args.content ?? ''), 'utf8');
           workspace.artifactPaths.push(fullPath);
 
-          const summary = await this.client.createMemory({
-            content: `Artifact summary: ${filename}`,
-            memoryType: 'ARTIFACT_SUMMARY',
-            icareStage: 'EXECUTION',
-            reasoningChainId: workspace.reasoningChainId,
-            metadata: {
-              source: 'continuity-agent',
-              agentRunId: workspace.agentRunId,
-              sessionId: workspace.sessionId,
-              icare: {
-                icareStage: 'EXECUTION',
-                reasoningChainId: workspace.reasoningChainId,
-              },
-              artifactId: fullPath,
-              createdByTool: 'artifact_write',
-              executionStatus: 'artifact_written',
-              policy: this.policy.name,
-            },
-          });
-          return { tool: call.tool, ok: true, result: { path: fullPath, memory: summary } };
-        }
-        case 'project_checkpoint': {
-          const result = await this.client.createMemory({
-            content: String(call.args.content ?? 'Checkpoint'),
-            memoryType: 'CHECKPOINT',
-            icareStage:
-              typeof call.args.icareStage === 'string' ? call.args.icareStage : 'EXECUTION',
-            reasoningChainId: workspace.reasoningChainId,
-            metadata:
-              call.args.metadata ??
-              ({
+          const summary = await this.client.createMemory(
+            this.scopedBody({
+              content: `Artifact summary: ${filename}`,
+              memoryType: 'ARTIFACT_SUMMARY',
+              icareStage: 'EXECUTION',
+              reasoningChainId: workspace.reasoningChainId,
+              metadata: {
                 source: 'continuity-agent',
                 agentRunId: workspace.agentRunId,
                 sessionId: workspace.sessionId,
@@ -500,8 +505,36 @@ export class ContinuityAgent {
                   icareStage: 'EXECUTION',
                   reasoningChainId: workspace.reasoningChainId,
                 },
-              } as Record<string, unknown>),
-          });
+                artifactId: fullPath,
+                createdByTool: 'artifact_write',
+                executionStatus: 'artifact_written',
+                policy: this.policy.name,
+              },
+            }),
+          );
+          return { tool: call.tool, ok: true, result: { path: fullPath, memory: summary } };
+        }
+        case 'project_checkpoint': {
+          const result = await this.client.createMemory(
+            this.scopedBody({
+              content: String(call.args.content ?? 'Checkpoint'),
+              memoryType: 'CHECKPOINT',
+              icareStage:
+                typeof call.args.icareStage === 'string' ? call.args.icareStage : 'EXECUTION',
+              reasoningChainId: workspace.reasoningChainId,
+              metadata:
+                call.args.metadata ??
+                ({
+                  source: 'continuity-agent',
+                  agentRunId: workspace.agentRunId,
+                  sessionId: workspace.sessionId,
+                  icare: {
+                    icareStage: 'EXECUTION',
+                    reasoningChainId: workspace.reasoningChainId,
+                  },
+                } as Record<string, unknown>),
+            }),
+          );
           const memory = asRecord(asRecord(result).memory ?? result);
           const id = typeof memory.id === 'string' ? memory.id : null;
           workspace.checkpointMemoryId = id;

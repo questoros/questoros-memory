@@ -54,9 +54,13 @@ export {
   syncPublishedArtifact,
   republishArtifact,
   __setStubDriveContent,
+  __simulateExternalDriveEdit,
+  __registerDriveBackend,
+  __resetDriveBackends,
   __setHarvestReasoningProvider,
   __getHarvestReasoningProvider,
 } from './phase5.js';
+export type { DriveBackend } from './phase5.js';
 export {
   transportWhoami,
   transportCreateMemory,

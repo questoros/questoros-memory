@@ -77,9 +77,9 @@ export class DeterministicContinuityPolicy implements ContinuityPolicy {
       return {
         tool: 'memory_search',
         args: {
-          query: workspace.goal || 'Continue the launch project',
-          limit: 10,
-          reasoningChainId: workspace.reasoningChainId,
+          query:
+            `${workspace.goal || 'Continue the launch project'} closing date launch date deadline constraint fire-safety`.trim(),
+          limit: 20,
         },
         reason: 'ICARE³ Context: recall prior project memories before acting.',
       };
@@ -337,7 +337,10 @@ export class ModelDirectedContinuityPolicy implements ContinuityPolicy {
       if (typeof decision.icareStage === 'string' && args.icareStage === undefined) {
         args.icareStage = decision.icareStage;
       }
-      if (args.reasoningChainId === undefined) {
+      // Cross-session continue must recall by scope, not by a fresh reasoning chain id.
+      if (decision.tool === 'memory_search') {
+        delete args.reasoningChainId;
+      } else if (args.reasoningChainId === undefined) {
         args.reasoningChainId = workspace.reasoningChainId;
       }
       if (decision.tool === 'memory_create' || decision.tool === 'project_checkpoint') {

@@ -27,6 +27,7 @@ import {
   ModelBackedHarvester,
 } from '@questoros-memory/harvester-core';
 import { StubDriveProvider, renderIntelligenceBrief } from '@questoros-memory/publisher-core';
+import type { DocumentPublisher, ExternalChangeReader } from '@questoros-memory/publisher-core';
 import {
   createReasoningProvider,
   MockReasoningProvider,
@@ -41,6 +42,26 @@ import { listMemories as listMemoriesOp, searchMemories } from './operations.js'
 const defaultExtractor = new DeterministicExtractor();
 /** Process-local stub Drive used when provider=stub (tests + hackathon). */
 const stubDrive = new StubDriveProvider();
+
+/** Injectable Drive backends for gated acceptance (fake Google / Microsoft). No live calls. */
+export type DriveBackend = DocumentPublisher &
+  ExternalChangeReader & {
+    updateDocument(input: { fileId: string; content: string }): Promise<unknown>;
+  };
+const driveBackends = new Map<string, DriveBackend>([['stub', stubDrive]]);
+
+export function __registerDriveBackend(provider: string, backend: DriveBackend): void {
+  driveBackends.set(provider, backend);
+}
+
+export function __resetDriveBackends(): void {
+  driveBackends.clear();
+  driveBackends.set('stub', stubDrive);
+}
+
+function resolveDriveBackend(provider: string): DriveBackend {
+  return driveBackends.get(provider) ?? stubDrive;
+}
 
 let harvestReasoning: ReasoningProvider = new MockReasoningProvider();
 let agenticHarvester = new ModelBackedHarvester({ reasoning: harvestReasoning });
@@ -837,7 +858,7 @@ export async function publishArtifact(
         })
       : input.content;
 
-  const published = await stubDrive.publish({
+  const published = await resolveDriveBackend(input.provider).publish({
     title: input.title,
     content: publishedContent,
     artifactType: input.artifactType,
@@ -959,7 +980,7 @@ export async function syncPublishedArtifact(
   const publishedMeta = asMetadataRecord(row.metadata);
   let change;
   try {
-    change = await stubDrive.detectChange(
+    change = await resolveDriveBackend(row.provider).detectChange(
       {
         provider: row.provider,
         driveId: typeof publishedMeta.driveId === 'string' ? publishedMeta.driveId : null,
@@ -1102,7 +1123,7 @@ export async function republishArtifact(
   const artifactMeta = asMetadataRecord(row.metadata);
   const reasoningChainId = resolveReasoningChainId(artifactMeta, input.reasoningChainId ?? null);
 
-  const republished = await stubDrive.republish(
+  const republished = await resolveDriveBackend(row.provider).republish(
     {
       provider: row.provider,
       driveId: typeof artifactMeta.driveId === 'string' ? artifactMeta.driveId : null,
@@ -1166,6 +1187,14 @@ export async function __setStubDriveContent(
   content: string,
 ): Promise<void> {
   await stubDrive.updateDocument({ fileId: externalFileId, content });
+}
+
+export async function __simulateExternalDriveEdit(
+  provider: string,
+  externalFileId: string,
+  content: string,
+): Promise<void> {
+  await resolveDriveBackend(provider).updateDocument({ fileId: externalFileId, content });
 }
 
 function serializeHarvestRun(run: repo.HarvestRunRow) {

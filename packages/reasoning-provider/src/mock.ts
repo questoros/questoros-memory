@@ -313,11 +313,11 @@ function extractFromProse(
 
   // Detect contradictions against related memories
   for (const candidate of candidates) {
-    if (!/launch date/i.test(candidate.content)) continue;
+    if (!/launch date|closing date|deadline/i.test(candidate.content)) continue;
     const candidateDate = firstDate(candidate.content)?.toLowerCase();
     if (!candidateDate) continue;
     for (const memory of related) {
-      if (!/launch date/i.test(memory.content)) continue;
+      if (!/launch date|closing date|deadline/i.test(memory.content)) continue;
       const memoryDate = firstDate(memory.content)?.toLowerCase();
       if (memoryDate && memoryDate !== candidateDate) {
         candidate.recommendedDisposition = 'CORRECT';
@@ -534,7 +534,12 @@ export class MockReasoningProvider implements ReasoningProvider {
       return toolSelectionDecisionSchema.parse({
         action: 'call_tool',
         tool: 'memory_search',
-        args: { query: request.userGoal || 'Continue the project', limit: 10 },
+        args: {
+          query: continueProject
+            ? `${request.userGoal} closing date launch date deadline constraint fire-safety`
+            : request.userGoal || 'Continue the project',
+          limit: 20,
+        },
         reason: 'Retrieve related organizational intelligence before acting.',
         icareStage: 'CONTEXT',
       });
