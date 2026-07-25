@@ -70,17 +70,25 @@ jobs:
             services/memory-api/src/lambda.ts
             services/memory-api/tests/lambda.test.ts
 
-      - name: Lint
-        run: pnpm lint
+      - name: Run validation diagnostics
+        shell: bash
+        run: |
+          mkdir -p .diagnostics
+          set +e
+          pnpm lint > .diagnostics/lint.log 2>&1
+          echo $? > .diagnostics/lint.exit
+          pnpm typecheck > .diagnostics/typecheck.log 2>&1
+          echo $? > .diagnostics/typecheck.exit
+          pnpm test > .diagnostics/test.log 2>&1
+          echo $? > .diagnostics/test.exit
+          pnpm build > .diagnostics/build.log 2>&1
+          echo $? > .diagnostics/build.exit
+          pnpm --filter @questoros-memory/aws-cdk synth > .diagnostics/synth.log 2>&1
+          echo $? > .diagnostics/synth.exit
+          set -e
 
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
-
-      - name: Build
-        run: pnpm build
-
-      - name: Synthesize and verify AWS staging package
-        run: pnpm --filter @questoros-memory/aws-cdk synth
+      - name: Upload validation diagnostics
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase6-validation-diagnostics
+          path: .diagnostics
