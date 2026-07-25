@@ -24,17 +24,17 @@ The low-volume staging estimate assumes:
 
 ## Estimated monthly AWS service cost
 
-| Service | Assumption | Approximate monthly cost before credits/free tier |
-| --- | --- | ---: |
-| API Gateway HTTP API | 10,000 requests at approximately $1.00 per million | $0.01 |
-| Lambda requests | 10,000 requests at $0.20 per million | less than $0.01 |
-| Lambda duration | 5,000 GB-seconds at approximately $0.0000166667 per GB-second | $0.08 |
-| Secrets Manager storage | One secret | $0.40 |
-| Secrets Manager API calls | Extension-cached retrieval, well below 10,000 calls | less than $0.01 |
-| CloudWatch alarms | Five standard-resolution alarm metrics at approximately $0.10 each | $0.50 |
-| CloudWatch Logs | 0.1 GB ingestion; regional rates vary | approximately $0.05–$0.10 |
-| Titan Text Embeddings V2 | Up to 1 million input tokens at approximately $0.02 per million | $0.02 |
-| **Estimated total** | Excludes data transfer and taxes | **approximately $1.07–$1.12/month** |
+| Service                   | Assumption                                                         | Approximate monthly cost before credits/free tier |
+| ------------------------- | ------------------------------------------------------------------ | ------------------------------------------------: |
+| API Gateway HTTP API      | 10,000 requests at approximately $1.00 per million                 |                                             $0.01 |
+| Lambda requests           | 10,000 requests at $0.20 per million                               |                                   less than $0.01 |
+| Lambda duration           | 5,000 GB-seconds at approximately $0.0000166667 per GB-second      |                                             $0.08 |
+| Secrets Manager storage   | One secret                                                         |                                             $0.40 |
+| Secrets Manager API calls | Extension-cached retrieval, well below 10,000 calls                |                                   less than $0.01 |
+| CloudWatch alarms         | Five standard-resolution alarm metrics at approximately $0.10 each |                                             $0.50 |
+| CloudWatch Logs           | 0.1 GB ingestion; regional rates vary                              |                         approximately $0.05–$0.10 |
+| Titan Text Embeddings V2  | Up to 1 million input tokens at approximately $0.02 per million    |                                             $0.02 |
+| **Estimated total**       | Excludes data transfer and taxes                                   |               **approximately $1.07–$1.12/month** |
 
 The Lambda and API Gateway portions may be covered by applicable AWS free usage or credits. The estimate deliberately shows the approximate pre-credit amount so the deployment decision does not depend on credits remaining available.
 

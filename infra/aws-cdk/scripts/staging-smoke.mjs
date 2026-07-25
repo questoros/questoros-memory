@@ -1,6 +1,8 @@
 const enabled = process.env.RUN_PHASE6_STAGING_SMOKE === 'true';
 if (!enabled) {
-  console.error('Staging smoke test is blocked. Set RUN_PHASE6_STAGING_SMOKE=true after deployment approval.');
+  console.error(
+    'Staging smoke test is blocked. Set RUN_PHASE6_STAGING_SMOKE=true after deployment approval.',
+  );
   process.exit(1);
 }
 
