@@ -40,6 +40,7 @@ vi.mock('@questoros-memory/database', async () => {
     getPublishedArtifact: vi.fn(),
     insertPublishedArtifact: vi.fn(),
     updatePublishedArtifact: vi.fn(),
+    updatePublishedArtifactIfMatch: vi.fn(),
     insertAuditEvent: vi.fn(),
     hashContent: actual.hashContent,
   };
@@ -442,7 +443,7 @@ describe('republish governance', () => {
     vi.mocked(repo.getMemoryCandidate).mockResolvedValue(makeCandidate());
     vi.mocked(repo.getMemory).mockResolvedValue(makeMemory());
     vi.mocked(repo.getRevision).mockResolvedValue(makeRevision());
-    vi.mocked(repo.updatePublishedArtifact).mockResolvedValue(
+    vi.mocked(repo.updatePublishedArtifactIfMatch).mockResolvedValue(
       makeArtifact({ syncStatus: 'REPUBLISHED' }),
     );
     vi.mocked(repo.insertAuditEvent).mockResolvedValue(undefined as never);
@@ -464,9 +465,83 @@ describe('republish governance', () => {
     });
 
     expect(republish).toHaveBeenCalledOnce();
-    expect(repo.updatePublishedArtifact).toHaveBeenCalledOnce();
+    expect(repo.updatePublishedArtifactIfMatch).toHaveBeenCalledOnce();
     expect(repo.insertAuditEvent).toHaveBeenCalledOnce();
     expect(result.artifact.syncStatus).toBe('REPUBLISHED');
+  });
+
+  it('calls provider exactly once when DB transaction retries on serialization failure', async () => {
+    vi.mocked(repo.getPublishedArtifact).mockResolvedValue(makeArtifact());
+    vi.mocked(repo.getMemoryCandidate).mockResolvedValue(makeCandidate());
+    vi.mocked(repo.getMemory).mockResolvedValue(makeMemory());
+    vi.mocked(repo.getRevision).mockResolvedValue(makeRevision());
+    vi.mocked(repo.insertAuditEvent).mockResolvedValue(undefined as never);
+    vi.mocked(repo.updatePublishedArtifactIfMatch)
+      .mockRejectedValueOnce(Object.assign(new Error('restart transaction'), { code: 'P2034' }))
+      .mockResolvedValueOnce(makeArtifact({ syncStatus: 'REPUBLISHED' }));
+
+    const actual = await vi.importActual<typeof import('@questoros-memory/database')>(
+      '@questoros-memory/database',
+    );
+    vi.mocked(repo.withTransaction).mockImplementation(async (_prisma, fn, context) =>
+      actual.withRetry(async () => fn(mockPrisma), context),
+    );
+
+    const republish = vi.fn().mockResolvedValue({
+      lastSyncedContentHash: 'newhash',
+      lastExternalModifiedAt: new Date().toISOString(),
+    });
+    __registerDriveBackend('stub', {
+      publish: vi.fn(),
+      republish,
+      detectChange: vi.fn(),
+      updateDocument: vi.fn(),
+    } as never);
+
+    const result = await republishArtifact(mockPrisma, projectAuth(), ARTIFACT_ID, {
+      approvedCandidateId: CANDIDATE_ID,
+      sourceMemoryIds: [MEMORY_ID],
+      sourceRevisionIds: [REVISION_ID],
+    });
+
+    expect(republish).toHaveBeenCalledTimes(1);
+    expect(repo.updatePublishedArtifactIfMatch).toHaveBeenCalledTimes(2);
+    expect(repo.insertAuditEvent).toHaveBeenCalledTimes(1);
+    expect(result.artifact.syncStatus).toBe('REPUBLISHED');
+  });
+
+  it('does not retry provider when DB persistence fails permanently after external write', async () => {
+    vi.mocked(repo.getPublishedArtifact).mockResolvedValue(makeArtifact());
+    vi.mocked(repo.getMemoryCandidate).mockResolvedValue(makeCandidate());
+    vi.mocked(repo.getMemory).mockResolvedValue(makeMemory());
+    vi.mocked(repo.getRevision).mockResolvedValue(makeRevision());
+    vi.mocked(repo.withTransaction).mockImplementation(async (_prisma, fn) => fn(mockPrisma));
+    vi.mocked(repo.updatePublishedArtifactIfMatch).mockRejectedValue(
+      Object.assign(new Error('permanent db failure'), { code: 'P1001' }),
+    );
+
+    const republish = vi.fn().mockResolvedValue({
+      lastSyncedContentHash: 'newhash',
+      lastExternalModifiedAt: new Date().toISOString(),
+    });
+    __registerDriveBackend('stub', {
+      publish: vi.fn(),
+      republish,
+      detectChange: vi.fn(),
+      updateDocument: vi.fn(),
+    } as never);
+
+    await expect(
+      republishArtifact(mockPrisma, projectAuth(), ARTIFACT_ID, {
+        approvedCandidateId: CANDIDATE_ID,
+        sourceMemoryIds: [MEMORY_ID],
+        sourceRevisionIds: [REVISION_ID],
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.RECONCILIATION_REQUIRED,
+      statusCode: 503,
+    });
+    expect(republish).toHaveBeenCalledTimes(1);
   });
 });
 
