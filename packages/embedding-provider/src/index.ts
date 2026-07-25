@@ -20,3 +20,7 @@ export {
   extractEmbeddingVector,
 } from './validation.js';
 export type { TitanInvokeBody } from './validation.js';
+export { BedrockTitanV2Provider } from './bedrock-titan-v2.js';
+export type { BedrockTitanV2ProviderOptions } from './bedrock-titan-v2.js';
+export { createEmbeddingProvider } from './factory.js';
+export type { CreateEmbeddingProviderOptions } from './factory.js';

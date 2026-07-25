@@ -9,9 +9,12 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . --max-warnings=0",
-    "test": "vitest run"
+    "test": "vitest run",
+    "live-preflight": "node ./scripts/live-preflight.mjs"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.830.0"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.8.0",

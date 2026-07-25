@@ -85,7 +85,7 @@ export default tseslint.config(
 
   // Node environment for scripts
   {
-    files: ['packages/database/scripts/**/*.ts'],
+    files: ['packages/database/scripts/**/*.ts', 'packages/*/scripts/**/*.{js,mjs,cjs,ts}'],
     languageOptions: {
       globals: {
         ...globals.node,
