@@ -41,6 +41,14 @@ const result = spawnSync(
   },
 );
 
+// Fail closed when Prisma did not execute successfully. Do not inspect stdout
+// as a successful drift result after a spawn, connection, or command failure.
+// Avoid echoing stderr because provider errors can contain environment details.
+if (result.error || result.signal || result.status !== 0) {
+  console.error('Prisma drift command failed to execute successfully.');
+  process.exit(1);
+}
+
 const script = `${result.stdout ?? ''}`;
 const lines = script
   .split(/\r?\n/)
