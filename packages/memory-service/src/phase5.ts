@@ -1506,85 +1506,116 @@ export async function republishArtifact(
   });
 
   const drive = resolveDriveBackend(row.provider);
+  const expectedSyncStatus = row.syncStatus;
+  const expectedLastSyncedContentHash = row.lastSyncedContentHash;
+  const operationId = requestId ?? randomUUID();
 
-  const result = await withTransaction(
-    prisma,
-    async (tx) => {
-      const republished = await drive.republish(
-        {
-          provider: row.provider,
-          driveId: typeof artifactMeta.driveId === 'string' ? artifactMeta.driveId : null,
-          siteId: typeof artifactMeta.siteId === 'string' ? artifactMeta.siteId : null,
-          externalFileId: row.externalFileId!,
-          externalUrl: row.externalUrl,
-          parentFolderId: row.parentFolderId,
-          artifactType: row.artifactType,
-          sourceMemoryIds: input.sourceMemoryIds,
-          sourceRevisionIds: input.sourceRevisionIds,
-          publishedAt: row.publishedAt.toISOString(),
-          publishedBy: row.actorId ?? auth.actorId,
-          lastExternalModifiedAt: row.lastExternalModifiedAt?.toISOString() ?? null,
-          lastSyncedContentHash: row.lastSyncedContentHash,
-          syncDirection: row.syncDirection as
-            'EXPORT_ONLY' | 'IMPORT_ONLY' | 'BIDIRECTIONAL_REVIEWED',
-          syncStatus: row.syncStatus as
-            | 'PENDING'
-            | 'PUBLISHED'
-            | 'EXTERNAL_CHANGED'
-            | 'SYNC_CONFLICT'
-            | 'REPUBLISHED'
-            | 'FAILED',
-          title: row.title,
-        },
-        publishedContent,
-      );
-
-      const updated = await repo.updatePublishedArtifact(tx, auth.tenantId, artifactId, {
-        content: publishedContent,
-        sourceMemoryIds: input.sourceMemoryIds,
-        sourceRevisionIds: input.sourceRevisionIds,
-        lastSyncedContentHash: republished.lastSyncedContentHash,
-        syncStatus: 'REPUBLISHED',
-        lastExternalModifiedAt: new Date(republished.lastExternalModifiedAt ?? Date.now()),
-        metadata: mergeMemoryMetadata({
-          metadata: {
-            ...artifactMeta,
-            requestId: requestId ?? null,
-            approvedCandidateId: candidate.id,
-            syncHarvestRunId,
-          },
-          icareStage: 'EXECUTION',
-          reasoningChainId,
-          executionStatus: 'republished',
-          outcomeSummary: 'Authoritative content republished after governed approval.',
-          lessonsLearned: ['Republish only after recommendation evaluation and memory update.'],
-        }),
-      });
-
-      await repo.insertAuditEvent(tx, {
-        tenantId: auth.tenantId,
-        workspaceId: row.workspaceId,
-        projectId: row.projectId,
-        actorId: auth.actorId,
-        memoryId: approvedMemory.id,
-        action: 'PUBLISH_REPUBLISH',
-        outcome: 'SUCCESS',
-        requestId: requestId ?? null,
-        reason: null,
-        metadata: {
-          artifactId,
-          approvedCandidateId: candidate.id,
-          icareStage: 'EXECUTION_EVALUATION',
-          reasoningChainId,
-        },
-      });
-
-      return updated;
+  // External side effect must run exactly once — never inside withTransaction/withRetry.
+  const externalFileId = row.externalFileId;
+  const republished = await drive.republish(
+    {
+      provider: row.provider,
+      driveId: typeof artifactMeta.driveId === 'string' ? artifactMeta.driveId : null,
+      siteId: typeof artifactMeta.siteId === 'string' ? artifactMeta.siteId : null,
+      externalFileId,
+      externalUrl: row.externalUrl,
+      parentFolderId: row.parentFolderId,
+      artifactType: row.artifactType,
+      sourceMemoryIds: input.sourceMemoryIds,
+      sourceRevisionIds: input.sourceRevisionIds,
+      publishedAt: row.publishedAt.toISOString(),
+      publishedBy: row.actorId ?? auth.actorId,
+      lastExternalModifiedAt: row.lastExternalModifiedAt?.toISOString() ?? null,
+      lastSyncedContentHash: row.lastSyncedContentHash,
+      syncDirection: row.syncDirection,
+      syncStatus: row.syncStatus,
+      title: row.title,
     },
-    'republishArtifact',
+    publishedContent,
   );
 
-  return { artifact: serializePublishedArtifact(result), reasoningChainId };
+  const persistMetadata = mergeMemoryMetadata({
+    metadata: {
+      ...artifactMeta,
+      requestId: requestId ?? null,
+      approvedCandidateId: candidate.id,
+      syncHarvestRunId,
+      republishOperationId: operationId,
+      externalRepublishHash: republished.lastSyncedContentHash,
+    },
+    icareStage: 'EXECUTION',
+    reasoningChainId,
+    executionStatus: 'republished',
+    outcomeSummary: 'Authoritative content republished after governed approval.',
+    lessonsLearned: ['Republish only after recommendation evaluation and memory update.'],
+  });
+
+  try {
+    const result = await withTransaction(
+      prisma,
+      async (tx) => {
+        const updated = await repo.updatePublishedArtifactIfMatch(
+          tx,
+          auth.tenantId,
+          artifactId,
+          {
+            syncStatuses: [expectedSyncStatus],
+            lastSyncedContentHash: expectedLastSyncedContentHash,
+          },
+          {
+            content: publishedContent,
+            sourceMemoryIds: input.sourceMemoryIds,
+            sourceRevisionIds: input.sourceRevisionIds,
+            lastSyncedContentHash: republished.lastSyncedContentHash,
+            syncStatus: 'REPUBLISHED',
+            lastExternalModifiedAt: new Date(republished.lastExternalModifiedAt ?? Date.now()),
+            metadata: persistMetadata,
+          },
+        );
+        if (!updated) {
+          throw new ServiceError(
+            ERROR_CODES.CONFLICT,
+            'Artifact changed concurrently during republish persistence.',
+            409,
+          );
+        }
+
+        await repo.insertAuditEvent(tx, {
+          tenantId: auth.tenantId,
+          workspaceId: row.workspaceId,
+          projectId: row.projectId,
+          actorId: auth.actorId,
+          memoryId: approvedMemory.id,
+          action: 'PUBLISH_REPUBLISH',
+          outcome: 'SUCCESS',
+          requestId: requestId ?? null,
+          reason: null,
+          metadata: {
+            artifactId,
+            approvedCandidateId: candidate.id,
+            republishOperationId: operationId,
+            icareStage: 'EXECUTION_EVALUATION',
+            reasoningChainId,
+          },
+        });
+
+        return updated;
+      },
+      'republishArtifact',
+    );
+
+    return { artifact: serializePublishedArtifact(result), reasoningChainId, operationId };
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === ERROR_CODES.CONFLICT) {
+      throw error;
+    }
+    // Provider already succeeded; do not retry external write. Surface reconciliation.
+    throw new ServiceError(
+      ERROR_CODES.RECONCILIATION_REQUIRED,
+      'External republish succeeded but database persistence failed; reconciliation required.',
+      503,
+    );
+  }
 }
 
 /** Test helper: mutate stub external content (simulates Drive edit). */

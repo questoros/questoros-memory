@@ -397,6 +397,52 @@ export async function updatePublishedArtifact(
   });
 }
 
+/**
+ * Conditional update after external republish. Returns null when the artifact
+ * no longer matches the expected pre-republish sync state (concurrent change).
+ */
+export async function updatePublishedArtifactIfMatch(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  tenantId: string,
+  artifactId: string,
+  expected: {
+    syncStatuses: string[];
+    lastSyncedContentHash: string;
+  },
+  data: {
+    content: string;
+    lastSyncedContentHash: string;
+    lastExternalModifiedAt: Date | null;
+    syncStatus: string;
+    sourceMemoryIds: string[];
+    sourceRevisionIds: string[];
+    metadata: Record<string, unknown>;
+  },
+): Promise<PublishedArtifactRow | null> {
+  const result = await prisma.publishedArtifact.updateMany({
+    where: {
+      tenantId,
+      id: artifactId,
+      syncStatus: { in: expected.syncStatuses },
+      lastSyncedContentHash: expected.lastSyncedContentHash,
+    },
+    data: {
+      content: data.content,
+      lastSyncedContentHash: data.lastSyncedContentHash,
+      lastExternalModifiedAt: data.lastExternalModifiedAt,
+      syncStatus: data.syncStatus,
+      sourceMemoryIds: asJson(data.sourceMemoryIds),
+      sourceRevisionIds: asJson(data.sourceRevisionIds),
+      metadata: asJson(data.metadata),
+      updatedAt: new Date(),
+    },
+  });
+  if (result.count !== 1) {
+    return null;
+  }
+  return getPublishedArtifact(prisma, tenantId, artifactId);
+}
+
 export async function insertSourceArtifact(
   prisma: PrismaClient | Prisma.TransactionClient,
   input: {

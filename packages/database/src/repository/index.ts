@@ -54,6 +54,7 @@ export {
   insertPublishedArtifact,
   getPublishedArtifact,
   updatePublishedArtifact,
+  updatePublishedArtifactIfMatch,
   insertSourceArtifact,
 } from './harvest.js';
 export type { HarvestRunRow, MemoryCandidateRow, PublishedArtifactRow } from './harvest.js';
