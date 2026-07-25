@@ -82,12 +82,20 @@ Hard isolation: `apps/continuity-agent` depends on `@questoros-memory/sdk` only.
 - State-driven loop mapped to ICARE³ stages
 - Creates ISSUE / EXECUTION / EXECUTION_EVALUATION memories with one chain per run
 - Two-session launch demo documents ICARE³ continuity
+- Phase 5B: `DeterministicContinuityPolicy` preserved; `ModelDirectedContinuityPolicy` selects tools via provider-neutral reasoning
 
 ### Checkpoint 7–9 — Publisher round-trip
 
 - Publish/sync/republish stamp ICARE³ stages on `published_artifacts.metadata` and audit
 - External edits → harvest candidates (never silent overwrite)
 - `SYNC_CONFLICT` when both sides changed
+- Phase 5B: `renderIntelligenceBrief` + fake Drive remain CI-safe (no live Drive calls)
+
+### Phase 5B — Real agentic Harvester
+
+- `@questoros-memory/reasoning-provider` — provider-neutral structured extraction, conflict analysis, policy evaluation, tool selection (mock by default; live calls gated)
+- `ModelBackedHarvester` forms governed candidates from ordinary enterprise text; `DeterministicExtractor` remains offline/test fallback
+- Harborview synthetic real-estate fixtures prove contradiction → approval → brief → continuity without live model/Drive/AWS
 
 ### Checkpoint 10 — AWS (plan only)
 
@@ -99,21 +107,24 @@ Hard isolation: `apps/continuity-agent` depends on `@questoros-memory/sdk` only.
 
 ## Packages
 
-| Package                              | Role                              |
-| ------------------------------------ | --------------------------------- |
-| `@questoros-memory/harvester-core`   | Extraction + analysis             |
-| `@questoros-memory/publisher-core`   | Drive/publisher interfaces + stub |
-| `@questoros-memory/drive-google`     | Google Drive adapter              |
-| `@questoros-memory/sdk`              | Public REST client                |
-| `@questoros-memory/continuity-agent` | Reference ICARE³ agent            |
+| Package                                | Role                                               |
+| -------------------------------------- | -------------------------------------------------- |
+| `@questoros-memory/reasoning-provider` | Structured agentic reasoning contracts + mock      |
+| `@questoros-memory/harvester-core`     | Deterministic + model-backed harvest orchestration |
+| `@questoros-memory/publisher-core`     | Drive/publisher interfaces, brief renderer, stub   |
+| `@questoros-memory/drive-google`       | Google Drive adapter (live gated)                  |
+| `@questoros-memory/sdk`                | Public REST client                                 |
+| `@questoros-memory/continuity-agent`   | Reference ICARE³ agent (deterministic + model)     |
 
 ---
 
 ## Demo narrative (ICARE³)
 
-1. **Session 1 — Issue/Context/Execution:** store goal + facts; write artifact; checkpoint; post-execution evaluation/lessons
-2. **Correction — Recommendation Evaluation:** August 15 → August 20 via correction + revision history
-3. **Session 2 — Context → Execution:** new process, empty chat; recall August 20; respect constraint; next artifact + checkpoint + evaluation
-4. **Publisher (stub/Google):** publish brief → human edit in Drive → sync creates candidates → approve → republish
+1. **Harvest Harborview sources** — property CSV, brief, transcript, lease, template
+2. **Show candidates + evidence** — commitment, deadline, constraint, missing document, template
+3. **Detect contradiction** — July 15 vs August 20 → CORRECT disposition (approval required)
+4. **Approve correction** — Recommendation Evaluation → authoritative memory + revision
+5. **Publish Project Intelligence Brief** — stub Drive; external edit → SYNC_CONFLICT candidates
+6. **Continuity Agent session (no chat history)** — model-directed tool selection recalls August 20, executes next task, stores artifact/checkpoint/outcome/lesson
 
 The Memory API and Continuity Agent remain independently deployable.
