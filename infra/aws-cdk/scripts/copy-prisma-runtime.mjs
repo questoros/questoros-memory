@@ -15,12 +15,7 @@ const packageSource = path.join(
   '@prisma',
   'client',
 );
-const packageDestination = path.join(
-  outputDir,
-  'node_modules',
-  '@prisma',
-  'client',
-);
+const packageDestination = path.join(outputDir, 'node_modules', '@prisma', 'client');
 
 if (!fs.existsSync(packageSource)) {
   console.error('Generated @prisma/client package was not found.');
@@ -36,9 +31,7 @@ if (!fs.existsSync(pnpmStore)) {
 const generatedCandidates = fs
   .readdirSync(pnpmStore, { withFileTypes: true })
   .filter((entry) => entry.isDirectory() && entry.name.startsWith('@prisma+client@'))
-  .map((entry) =>
-    path.join(pnpmStore, entry.name, 'node_modules', '.prisma', 'client'),
-  )
+  .map((entry) => path.join(pnpmStore, entry.name, 'node_modules', '.prisma', 'client'))
   .filter((candidate) => fs.existsSync(candidate));
 
 const generatedSource = generatedCandidates.find((candidate) =>
@@ -52,12 +45,7 @@ if (!generatedSource) {
   process.exit(1);
 }
 
-const generatedDestination = path.join(
-  outputDir,
-  'node_modules',
-  '.prisma',
-  'client',
-);
+const generatedDestination = path.join(outputDir, 'node_modules', '.prisma', 'client');
 
 fs.rmSync(packageDestination, { recursive: true, force: true });
 fs.rmSync(generatedDestination, { recursive: true, force: true });

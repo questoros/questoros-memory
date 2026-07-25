@@ -13,8 +13,7 @@ import { Construct } from 'constructs';
 const DEPLOYMENT_REGION = 'ap-southeast-1';
 const BEDROCK_REGION = 'us-west-2';
 const DATABASE_SECRET_NAME = 'questoros-memory/staging/database-url';
-const TITAN_MODEL_ARN =
-  'arn:aws:bedrock:us-west-2::foundation-model/amazon.titan-embed-text-v2:0';
+const TITAN_MODEL_ARN = 'arn:aws:bedrock:us-west-2::foundation-model/amazon.titan-embed-text-v2:0';
 const PARAMETERS_SECRETS_EXTENSION_PARAMETER =
   '/aws/service/aws-parameters-and-secrets-lambda-extension/x86/latest';
 
@@ -114,10 +113,7 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
       createDefaultStage: false,
     });
 
-    const integration = new integrations.HttpLambdaIntegration(
-      'MemoryLambdaIntegration',
-      fn,
-    );
+    const integration = new integrations.HttpLambdaIntegration('MemoryLambdaIntegration', fn);
     httpApi.addRoutes({
       path: '/{proxy+}',
       methods: [apigwv2.HttpMethod.ANY],

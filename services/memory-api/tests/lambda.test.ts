@@ -211,9 +211,7 @@ describe('Lambda runtime secret initialization', () => {
       json: async () => ({ SecretString: 'https://example.com/not-a-database' }),
     });
 
-    await expect(initializeLambdaRuntime({ env, fetcher })).rejects.toThrow(
-      'PostgreSQL protocol',
-    );
+    await expect(initializeLambdaRuntime({ env, fetcher })).rejects.toThrow('PostgreSQL protocol');
     expect(env.DATABASE_URL).toBeUndefined();
   });
 });

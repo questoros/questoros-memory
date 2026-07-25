@@ -16,11 +16,11 @@ The previous inline `501 Not deployed` Lambda placeholder has been replaced by t
 
 ## Regions
 
-| Concern | Region |
-| --- | --- |
+| Concern                | Region           |
+| ---------------------- | ---------------- |
 | Application deployment | `ap-southeast-1` |
-| CockroachDB cluster | Singapore |
-| Bedrock InvokeModel | `us-west-2` |
+| CockroachDB cluster    | Singapore        |
+| Bedrock InvokeModel    | `us-west-2`      |
 
 Application and Bedrock regions remain separate settings.
 

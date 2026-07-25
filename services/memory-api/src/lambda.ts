@@ -26,14 +26,7 @@ export interface ApiGatewayV2Result {
   isBase64Encoded?: boolean;
 }
 
-type SupportedMethod =
-  | 'GET'
-  | 'POST'
-  | 'PUT'
-  | 'PATCH'
-  | 'DELETE'
-  | 'OPTIONS'
-  | 'HEAD';
+type SupportedMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
 
 type FetchResponse = {
   ok: boolean;
@@ -103,9 +96,7 @@ function responseHeaders(headers: Record<string, string | string[] | undefined>)
       cookies = Array.isArray(value) ? value.map(String) : [String(value)];
       continue;
     }
-    normalized[name] = Array.isArray(value)
-      ? value.map(String).join(',')
-      : String(value);
+    normalized[name] = Array.isArray(value) ? value.map(String).join(',') : String(value);
   }
 
   return { headers: normalized, cookies };
@@ -236,14 +227,11 @@ function runtimeUnavailable(requestId?: string): ApiGatewayV2Result {
  */
 export function createLambdaHandler(options: LambdaHandlerOptions = {}) {
   const appBuilder =
-    options.build ??
-    (() => buildApp({ logLevel: process.env.LOG_LEVEL ?? 'info' }));
+    options.build ?? (() => buildApp({ logLevel: process.env.LOG_LEVEL ?? 'info' }));
   const initialize = options.initialize ?? initializeLambdaRuntime;
   let appPromise: Promise<FastifyInstance> | null = null;
 
-  return async function lambdaHandler(
-    event: ApiGatewayV2Event,
-  ): Promise<ApiGatewayV2Result> {
+  return async function lambdaHandler(event: ApiGatewayV2Event): Promise<ApiGatewayV2Result> {
     const method = normalizeMethod(event.requestContext.http.method);
     if (!method) {
       return {
@@ -261,9 +249,7 @@ export function createLambdaHandler(options: LambdaHandlerOptions = {}) {
 
     const rawPath = event.rawPath ?? event.requestContext.http.path ?? '/';
     const path = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
-    const url = event.rawQueryString
-      ? `${path}?${event.rawQueryString}`
-      : path;
+    const url = event.rawQueryString ? `${path}?${event.rawQueryString}` : path;
     const payload =
       event.body === undefined || event.body === null
         ? undefined

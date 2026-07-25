@@ -73,9 +73,7 @@ if (!templatePath) {
 }
 const template = JSON.parse(fs.readFileSync(templatePath, 'utf8'));
 const resources = Object.values(template.Resources ?? {});
-const lambdaFunctions = resources.filter(
-  (resource) => resource?.Type === 'AWS::Lambda::Function',
-);
+const lambdaFunctions = resources.filter((resource) => resource?.Type === 'AWS::Lambda::Function');
 if (lambdaFunctions.length !== 1) {
   fail(`expected one Lambda function, found ${lambdaFunctions.length}.`);
 }
