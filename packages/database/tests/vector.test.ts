@@ -1,10 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { validateVector, serializeVector, cosineDistanceSql } from '../src/vector';
+import {
+  validateVector,
+  validateDimension,
+  serializeVector,
+  cosineDistanceSql,
+} from '../src/vector';
 
 describe('validateVector', () => {
   it('accepts a valid 1024-dimensional finite vector', () => {
     const vec = new Array(1024).fill(0.5);
     expect(() => validateVector(vec)).not.toThrow();
+  });
+
+  it('rejects non-array input', () => {
+    expect(() => validateVector('not-an-array' as never)).toThrow(/must be an array/);
   });
 
   it('rejects 1023 dimensions', () => {
@@ -33,6 +42,20 @@ describe('validateVector', () => {
     const vec = new Array(1024).fill(0.5);
     vec[0] = -Infinity;
     expect(() => validateVector(vec)).toThrow('not a finite number');
+  });
+});
+
+describe('validateDimension', () => {
+  it('accepts matching length arrays', () => {
+    expect(() => validateDimension([1, 2, 3], 3)).not.toThrow();
+  });
+
+  it('rejects non-array input', () => {
+    expect(() => validateDimension(null as never, 3)).toThrow(/must be an array/);
+  });
+
+  it('rejects wrong length', () => {
+    expect(() => validateDimension([1, 2], 3)).toThrow(/exactly 3 dimensions/);
   });
 });
 

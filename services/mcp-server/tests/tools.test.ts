@@ -192,6 +192,38 @@ describe('registerTools', () => {
     });
     expect(mockEmbed).toHaveBeenCalled();
   });
+
+  it('returns list and get success payloads', async () => {
+    const { server, tools } = createMockServer();
+    registerTools(server as never, API_KEY);
+
+    const listed = await tools.get('questoros_memory_list')!.handler({});
+    expect(listed.content[0].text).toContain('Found 0 memories');
+    expect(mockList).toHaveBeenCalledWith(API_KEY, expect.any(Object));
+
+    const got = await tools.get('questoros_memory_get')!.handler({ memoryId: MEMORY_ID });
+    expect(got.content[0].text).toContain(MEMORY_ID);
+    expect(got.isError).toBeUndefined();
+  });
+
+  it('reports already-deleted delete results', async () => {
+    const { server, tools } = createMockServer();
+    registerTools(server as never, API_KEY);
+    mockDelete.mockResolvedValueOnce({ alreadyDeleted: true });
+    const result = await tools.get('questoros_memory_delete')!.handler({ memoryId: MEMORY_ID });
+    expect(result.content[0].text).toContain('already deleted');
+  });
+
+  it('converts unexpected non-ServiceError failures safely', async () => {
+    const { server, tools } = createMockServer();
+    registerTools(server as never, API_KEY);
+    mockList.mockRejectedValueOnce(new Error('boom with postgresql://secret'));
+    const result = await tools.get('questoros_memory_list')!.handler({});
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe('Error: request failed.');
+    expect(result.content[0].text).not.toContain('postgresql');
+    expect(result.content[0].text).not.toContain(API_KEY);
+  });
 });
 
 describe('protocol safety', () => {

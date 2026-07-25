@@ -344,4 +344,95 @@ describe('REST routes', () => {
     expect(response.json().error.code).toBe('VALIDATION_ERROR');
     await app.close();
   });
+
+  it('maps transport failures on list/search/correct/delete/history/embed routes', async () => {
+    const app = await buildApp({ logLevel: 'silent' });
+    const denied = new ServiceError(ERROR_CODES.PERMISSION_DENIED, 'Denied.', 403);
+
+    mockList.mockRejectedValueOnce(denied);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/v1/memories',
+          headers: authHeader(),
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    mockSearch.mockRejectedValueOnce(denied);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/v1/memories/search',
+          headers: { ...authHeader(), 'content-type': 'application/json' },
+          payload: { scopeType: 'TENANT', queryText: 'x' },
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    mockCorrect.mockRejectedValueOnce(denied);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/v1/memories/${MEMORY_ID}/corrections`,
+          headers: { ...authHeader(), 'content-type': 'application/json' },
+          payload: { content: 'x', reason: 'y' },
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    mockDelete.mockRejectedValueOnce(denied);
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/v1/memories/${MEMORY_ID}`,
+          headers: authHeader(),
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    mockHistory.mockRejectedValueOnce(denied);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/v1/memories/${MEMORY_ID}/revisions`,
+          headers: authHeader(),
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    mockEmbed.mockRejectedValueOnce(denied);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: `/v1/memories/${MEMORY_ID}/embedding`,
+          headers: { ...authHeader(), 'content-type': 'application/json' },
+          payload: { embedding: Array.from({ length: 1024 }, () => 0.01) },
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    await app.close();
+  });
+
+  it('rejects non-Bearer authorization schemes as missing token', async () => {
+    const app = await buildApp({ logLevel: 'silent' });
+    mockWhoami.mockRejectedValueOnce(
+      new ServiceError(ERROR_CODES.AUTH_REQUIRED, 'Authentication required.', 401),
+    );
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/whoami',
+      headers: { authorization: 'Basic abc' },
+    });
+    expect(mockWhoami).toHaveBeenCalledWith(undefined);
+    expect(response.statusCode).toBe(401);
+    await app.close();
+  });
 });
