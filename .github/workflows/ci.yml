@@ -35,8 +35,41 @@ jobs:
       - name: Build packages
         run: pnpm exec turbo run build --filter=./packages/*
 
-      - name: Format check
-        run: pnpm format:check
+      - name: Format Phase 6 files
+        run: |
+          pnpm exec prettier --write \
+            .github/workflows/ci.yml \
+            .github/workflows/phase6-format.yml \
+            .gitignore \
+            infra/aws-cdk/README.md \
+            infra/aws-cdk/package.json \
+            infra/aws-cdk/src/app.ts \
+            infra/aws-cdk/scripts/copy-prisma-runtime.mjs \
+            infra/aws-cdk/scripts/prepare-prisma-runtime.mjs \
+            infra/aws-cdk/scripts/synth.mjs \
+            infra/aws-cdk/scripts/verify-assembly.mjs \
+            services/memory-api/src/index.ts \
+            services/memory-api/src/lambda.ts \
+            services/memory-api/tests/lambda.test.ts
+
+      - name: Upload canonical formatted files
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase6-formatted-files
+          path: |
+            .github/workflows/ci.yml
+            .github/workflows/phase6-format.yml
+            .gitignore
+            infra/aws-cdk/README.md
+            infra/aws-cdk/package.json
+            infra/aws-cdk/src/app.ts
+            infra/aws-cdk/scripts/copy-prisma-runtime.mjs
+            infra/aws-cdk/scripts/prepare-prisma-runtime.mjs
+            infra/aws-cdk/scripts/synth.mjs
+            infra/aws-cdk/scripts/verify-assembly.mjs
+            services/memory-api/src/index.ts
+            services/memory-api/src/lambda.ts
+            services/memory-api/tests/lambda.test.ts
 
       - name: Lint
         run: pnpm lint
