@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import { ServiceError, parseContract, memoryIdParamsSchema } from '@questoros-memory/memory-core';
 import {
   transportWhoami,
   transportCreateMemory,
@@ -11,8 +10,27 @@ import {
   transportRevisionHistory,
   transportUpsertEmbedding,
   transportGenerateEmbedding,
+  transportCreateHarvestRun,
+  transportGetHarvestRun,
+  transportListCandidates,
+  transportGetCandidate,
+  transportApproveCandidate,
+  transportRejectCandidate,
+  transportCreateContextPackage,
+  transportPublishArtifact,
+  transportGetPublishedArtifact,
+  transportSyncPublishedArtifact,
+  transportRepublishArtifact,
   transportReadyz,
 } from '@questoros-memory/memory-service';
+import {
+  ServiceError,
+  parseContract,
+  memoryIdParamsSchema,
+  harvestRunIdParamsSchema,
+  candidateIdParamsSchema,
+  publishedArtifactIdParamsSchema,
+} from '@questoros-memory/memory-core';
 
 function extractToken(request: {
   headers: Record<string, string | string[] | undefined>;
@@ -181,6 +199,146 @@ export function registerRoutes(app: FastifyInstance): void {
         extractToken(request),
         params.memoryId,
         request.body ?? {},
+        requestId,
+      );
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.post('/v1/harvest/runs', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const result = await transportCreateHarvestRun(
+        extractToken(request),
+        request.body,
+        requestId,
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.get('/v1/harvest/runs/:runId', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const params = parseContract(harvestRunIdParamsSchema, request.params);
+      const result = await transportGetHarvestRun(extractToken(request), params.runId);
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.get('/v1/candidates', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const result = await transportListCandidates(extractToken(request), request.query);
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.get('/v1/candidates/:candidateId', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const params = parseContract(candidateIdParamsSchema, request.params);
+      const result = await transportGetCandidate(extractToken(request), params.candidateId);
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.post('/v1/candidates/:candidateId/approve', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const params = parseContract(candidateIdParamsSchema, request.params);
+      const result = await transportApproveCandidate(
+        extractToken(request),
+        params.candidateId,
+        request.body ?? {},
+        requestId,
+      );
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.post('/v1/candidates/:candidateId/reject', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const params = parseContract(candidateIdParamsSchema, request.params);
+      const result = await transportRejectCandidate(
+        extractToken(request),
+        params.candidateId,
+        request.body ?? {},
+        requestId,
+      );
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.post('/v1/context/packages', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const result = await transportCreateContextPackage(extractToken(request), request.body);
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.post('/v1/publish/artifacts', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const result = await transportPublishArtifact(extractToken(request), request.body, requestId);
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.get('/v1/publish/artifacts/:artifactId', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const params = parseContract(publishedArtifactIdParamsSchema, request.params);
+      const result = await transportGetPublishedArtifact(extractToken(request), params.artifactId);
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.post('/v1/publish/artifacts/:artifactId/sync', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const params = parseContract(publishedArtifactIdParamsSchema, request.params);
+      const result = await transportSyncPublishedArtifact(
+        extractToken(request),
+        params.artifactId,
+        requestId,
+      );
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.post('/v1/publish/artifacts/:artifactId/republish', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const params = parseContract(publishedArtifactIdParamsSchema, request.params);
+      const result = await transportRepublishArtifact(
+        extractToken(request),
+        params.artifactId,
+        request.body,
         requestId,
       );
       return reply.status(200).send(result);

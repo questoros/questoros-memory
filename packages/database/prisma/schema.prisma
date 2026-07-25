@@ -26,6 +26,9 @@ model Tenant {
   memoryAuditEvents MemoryAuditEvent[]
   memoryEmbeddings  MemoryEmbedding[]
   apiKeys           ApiKey[]
+  harvestRuns       HarvestRun[]
+  memoryCandidates  MemoryCandidate[]
+  publishedArtifacts PublishedArtifact[]
 
   @@map("tenants")
 }
@@ -48,6 +51,9 @@ model Workspace {
   memoryAuditEvents MemoryAuditEvent[]
   sourceArtifacts   SourceArtifact[]
   apiKeys           ApiKey[]
+  harvestRuns       HarvestRun[]
+  memoryCandidates  MemoryCandidate[]
+  publishedArtifacts PublishedArtifact[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, id])
@@ -73,6 +79,9 @@ model Project {
   memories          Memory[]
   memoryAuditEvents MemoryAuditEvent[]
   apiKeys           ApiKey[]
+  harvestRuns       HarvestRun[]
+  memoryCandidates  MemoryCandidate[]
+  publishedArtifacts PublishedArtifact[]
 
   @@unique([tenantId, workspaceId, slug])
   @@unique([tenantId, id])
@@ -97,6 +106,8 @@ model Actor {
   memoryRevisions   MemoryRevision[]
   memoryAuditEvents MemoryAuditEvent[]
   apiKeys           ApiKey[]
+  harvestRuns       HarvestRun[]
+  publishedArtifacts PublishedArtifact[]
 
   @@unique([tenantId, externalId])
   @@unique([tenantId, id])
@@ -121,6 +132,7 @@ model SourceArtifact {
   project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
 
   memories Memory[]
+  harvestRuns HarvestRun[]
 
   @@unique([tenantId, id])
   @@map("source_artifacts")
@@ -262,4 +274,105 @@ model ApiKey {
   @@unique([keyHash])
   @@unique([tenantId, id])
   @@map("api_keys")
+}
+
+/// A harvest extraction run that produces memory candidates.
+model HarvestRun {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  workspaceId      String?  @map("workspace_id") @db.Uuid
+  projectId        String?  @map("project_id") @db.Uuid
+  actorId          String?  @map("actor_id") @db.Uuid
+  sourceArtifactId String?  @map("source_artifact_id") @db.Uuid
+  scopeType        String   @map("scope_type") @db.String
+  scopeId          String   @map("scope_id") @db.Uuid
+  status           String   @default("PENDING") @db.String
+  title            String?  @db.String
+  errorMessage     String?  @map("error_message") @db.String
+  metadata         Json     @default("{}") @db.JsonB
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  workspace      Workspace?      @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
+  project        Project?        @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
+  actor          Actor?          @relation(fields: [tenantId, actorId], references: [tenantId, id])
+  sourceArtifact SourceArtifact? @relation(fields: [tenantId, sourceArtifactId], references: [tenantId, id])
+  candidates     MemoryCandidate[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, status, createdAt(dsc: true)])
+  @@map("harvest_runs")
+}
+
+/// A proposed memory awaiting review before becoming authoritative.
+model MemoryCandidate {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  workspaceId       String?  @map("workspace_id") @db.Uuid
+  projectId         String?  @map("project_id") @db.Uuid
+  harvestRunId      String   @map("harvest_run_id") @db.Uuid
+  sourceArtifactId  String?  @map("source_artifact_id") @db.Uuid
+  scopeType         String   @map("scope_type") @db.String
+  scopeId           String   @map("scope_id") @db.Uuid
+  memoryType        String   @map("memory_type") @db.String
+  status            String   @default("PENDING") @db.String
+  content           String   @db.String
+  contentHash       String   @map("content_hash") @db.String
+  confidence        Decimal  @default(1.0000) @db.Decimal(5, 4)
+  relatedMemoryIds  Json     @default("[]") @map("related_memory_ids") @db.JsonB
+  approvedMemoryId  String?  @map("approved_memory_id") @db.Uuid
+  reviewReason      String?  @map("review_reason") @db.String
+  metadata          Json     @default("{}") @db.JsonB
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  reviewedAt        DateTime? @map("reviewed_at") @db.Timestamptz(6)
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  workspace  Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
+  project    Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
+  harvestRun HarvestRun @relation(fields: [tenantId, harvestRunId], references: [tenantId, id])
+
+  @@unique([tenantId, id])
+  @@index([tenantId, harvestRunId, status])
+  @@index([tenantId, status, createdAt(dsc: true)])
+  @@map("memory_candidates")
+}
+
+/// A published intelligence artifact synced to external collaboration storage.
+model PublishedArtifact {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String   @map("tenant_id") @db.Uuid
+  workspaceId            String?  @map("workspace_id") @db.Uuid
+  projectId              String?  @map("project_id") @db.Uuid
+  actorId                String?  @map("actor_id") @db.Uuid
+  scopeType              String   @map("scope_type") @db.String
+  scopeId                String   @map("scope_id") @db.Uuid
+  provider               String   @db.String
+  externalFileId         String?  @map("external_file_id") @db.String
+  externalUrl            String?  @map("external_url") @db.String
+  parentFolderId         String?  @map("parent_folder_id") @db.String
+  artifactType           String   @map("artifact_type") @db.String
+  title                  String   @db.String
+  content                String   @db.String
+  sourceMemoryIds        Json     @default("[]") @map("source_memory_ids") @db.JsonB
+  sourceRevisionIds      Json     @default("[]") @map("source_revision_ids") @db.JsonB
+  publishedAt            DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
+  lastExternalModifiedAt DateTime? @map("last_external_modified_at") @db.Timestamptz(6)
+  lastSyncedContentHash  String   @map("last_synced_content_hash") @db.String
+  syncDirection          String   @map("sync_direction") @db.String
+  syncStatus             String   @map("sync_status") @db.String
+  metadata               Json     @default("{}") @db.JsonB
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
+  project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
+  actor     Actor?     @relation(fields: [tenantId, actorId], references: [tenantId, id])
+
+  @@unique([tenantId, id])
+  @@index([tenantId, syncStatus, updatedAt(dsc: true)])
+  @@map("published_artifacts")
 }

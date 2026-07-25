@@ -37,6 +37,9 @@ const EXPECTED_TABLES = [
   'memory_embeddings',
   'memory_audit_events',
   'api_keys',
+  'harvest_runs',
+  'memory_candidates',
+  'published_artifacts',
 ];
 
 // Required composite foreign keys
@@ -64,6 +67,9 @@ const REQUIRED_FKS: Record<string, string[]> = {
     'api_keys_tenant_workspace_fkey',
     'api_keys_tenant_workspace_project_fkey',
   ],
+  harvest_runs: ['harvest_runs_tenant_fkey'],
+  memory_candidates: ['memory_candidates_tenant_fkey', 'memory_candidates_harvest_run_fkey'],
+  published_artifacts: ['published_artifacts_tenant_fkey'],
 };
 
 // Required unique constraints
@@ -208,6 +214,71 @@ const EXPECTED_COLUMNS: Record<string, string[]> = {
     'created_at',
     'revoked_at',
   ],
+  harvest_runs: [
+    'id',
+    'tenant_id',
+    'workspace_id',
+    'project_id',
+    'actor_id',
+    'source_artifact_id',
+    'scope_type',
+    'scope_id',
+    'status',
+    'title',
+    'error_message',
+    'metadata',
+    'created_at',
+    'updated_at',
+    'completed_at',
+  ],
+  memory_candidates: [
+    'id',
+    'tenant_id',
+    'workspace_id',
+    'project_id',
+    'harvest_run_id',
+    'source_artifact_id',
+    'scope_type',
+    'scope_id',
+    'memory_type',
+    'status',
+    'content',
+    'content_hash',
+    'confidence',
+    'related_memory_ids',
+    'approved_memory_id',
+    'review_reason',
+    'metadata',
+    'created_at',
+    'updated_at',
+    'reviewed_at',
+  ],
+  published_artifacts: [
+    'id',
+    'tenant_id',
+    'workspace_id',
+    'project_id',
+    'actor_id',
+    'scope_type',
+    'scope_id',
+    'provider',
+    'external_file_id',
+    'external_url',
+    'parent_folder_id',
+    'artifact_type',
+    'title',
+    'content',
+    'source_memory_ids',
+    'source_revision_ids',
+    'published_at',
+    'last_external_modified_at',
+    'last_synced_content_hash',
+    'sync_direction',
+    'sync_status',
+    'metadata',
+    'created_at',
+    'updated_at',
+  ],
 };
 
 function pass(label: string): void {
@@ -274,14 +345,14 @@ async function main(): Promise<void> {
 
     const existingTables = tablesResult.rows.map((r) => r.table_name);
 
-    // Check for ten tables (excluding _prisma_migrations)
+    // Check for application tables (excluding _prisma_migrations)
     const appTables = existingTables.filter((t) => t !== '_prisma_migrations');
-    console.log('\n── Table verification (expect 10) ──\n');
+    console.log(`\n── Table verification (expect ${EXPECTED_TABLES.length}) ──\n`);
 
-    if (appTables.length === 10) {
-      pass(`Ten application tables found (${appTables.length})`);
+    if (appTables.length === EXPECTED_TABLES.length) {
+      pass(`Thirteen application tables found (${appTables.length})`);
     } else {
-      fail(`Expected 10 application tables, found ${appTables.length}`);
+      fail(`Expected ${EXPECTED_TABLES.length} application tables, found ${appTables.length}`);
       hasErrors = true;
     }
 

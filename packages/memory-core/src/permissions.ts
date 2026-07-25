@@ -4,6 +4,9 @@ export const API_PERMISSIONS = [
   'memory:correct',
   'memory:delete',
   'memory:embed',
+  'memory:harvest',
+  'memory:review',
+  'memory:publish',
   'memory:admin',
 ] as const;
 
@@ -16,6 +19,9 @@ export const PERMISSION_HIERARCHY: Record<ApiPermission, readonly ApiPermission[
     'memory:correct',
     'memory:delete',
     'memory:embed',
+    'memory:harvest',
+    'memory:review',
+    'memory:publish',
     'memory:admin',
   ],
   'memory:read': ['memory:read'],
@@ -23,6 +29,9 @@ export const PERMISSION_HIERARCHY: Record<ApiPermission, readonly ApiPermission[
   'memory:correct': ['memory:correct'],
   'memory:delete': ['memory:delete'],
   'memory:embed': ['memory:embed'],
+  'memory:harvest': ['memory:harvest'],
+  'memory:review': ['memory:review'],
+  'memory:publish': ['memory:publish'],
 };
 
 export function hasPermission(granted: readonly ApiPermission[], required: ApiPermission): boolean {
@@ -60,7 +69,10 @@ export function sortPermissions(perms: readonly ApiPermission[]): ApiPermission[
     'memory:correct': 2,
     'memory:delete': 3,
     'memory:embed': 4,
-    'memory:admin': 5,
+    'memory:harvest': 5,
+    'memory:review': 6,
+    'memory:publish': 7,
+    'memory:admin': 8,
   };
   return [...perms].sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99));
 }

@@ -22,6 +22,19 @@ import {
   type UpsertEmbeddingInput,
 } from './operations.js';
 import { generateEmbeddingForMemory } from './embeddings.js';
+import {
+  createHarvestRun,
+  getHarvestRun,
+  listCandidates,
+  getCandidate,
+  approveCandidate,
+  rejectCandidate,
+  createContextPackage,
+  publishArtifact,
+  getPublishedArtifact,
+  syncPublishedArtifact,
+  republishArtifact,
+} from './phase5.js';
 
 async function withAuth(token: string | undefined): Promise<{
   auth: AuthContext;
@@ -127,6 +140,88 @@ export async function transportGenerateEmbedding(
     force,
     requestId,
   });
+}
+
+export async function transportCreateHarvestRun(
+  token: string | undefined,
+  body: unknown,
+  requestId?: string,
+) {
+  const { auth } = await withAuth(token);
+  return createHarvestRun(getDatabaseClient(), auth, body, requestId);
+}
+
+export async function transportGetHarvestRun(token: string | undefined, runId: string) {
+  const { auth } = await withAuth(token);
+  return getHarvestRun(getDatabaseClient(), auth, runId);
+}
+
+export async function transportListCandidates(token: string | undefined, query: unknown) {
+  const { auth } = await withAuth(token);
+  return listCandidates(getDatabaseClient(), auth, query);
+}
+
+export async function transportGetCandidate(token: string | undefined, candidateId: string) {
+  const { auth } = await withAuth(token);
+  return getCandidate(getDatabaseClient(), auth, candidateId);
+}
+
+export async function transportApproveCandidate(
+  token: string | undefined,
+  candidateId: string,
+  body: unknown,
+  requestId?: string,
+) {
+  const { auth } = await withAuth(token);
+  return approveCandidate(getDatabaseClient(), auth, candidateId, body, requestId);
+}
+
+export async function transportRejectCandidate(
+  token: string | undefined,
+  candidateId: string,
+  body: unknown,
+  requestId?: string,
+) {
+  const { auth } = await withAuth(token);
+  return rejectCandidate(getDatabaseClient(), auth, candidateId, body, requestId);
+}
+
+export async function transportCreateContextPackage(token: string | undefined, body: unknown) {
+  const { auth } = await withAuth(token);
+  return createContextPackage(getDatabaseClient(), auth, body);
+}
+
+export async function transportPublishArtifact(
+  token: string | undefined,
+  body: unknown,
+  requestId?: string,
+) {
+  const { auth } = await withAuth(token);
+  return publishArtifact(getDatabaseClient(), auth, body, requestId);
+}
+
+export async function transportGetPublishedArtifact(token: string | undefined, artifactId: string) {
+  const { auth } = await withAuth(token);
+  return getPublishedArtifact(getDatabaseClient(), auth, artifactId);
+}
+
+export async function transportSyncPublishedArtifact(
+  token: string | undefined,
+  artifactId: string,
+  requestId?: string,
+) {
+  const { auth } = await withAuth(token);
+  return syncPublishedArtifact(getDatabaseClient(), auth, artifactId, requestId);
+}
+
+export async function transportRepublishArtifact(
+  token: string | undefined,
+  artifactId: string,
+  body: unknown,
+  requestId?: string,
+) {
+  const { auth } = await withAuth(token);
+  return republishArtifact(getDatabaseClient(), auth, artifactId, body, requestId);
 }
 
 /** Health helpers used by REST — not business logic. */

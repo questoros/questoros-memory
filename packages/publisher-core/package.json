@@ -1,0 +1,19 @@
+{
+  "name": "@questoros-memory/publisher-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Provider-neutral Drive publisher contracts and in-memory stub provider",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.10"
+  }
+}

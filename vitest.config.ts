@@ -15,6 +15,19 @@ export default defineConfig({
         'packages/embedding-provider/src/index.ts',
       ),
       '@questoros-memory/shared': path.resolve(__dirname, 'packages/shared/src/index.ts'),
+      '@questoros-memory/harvester-core': path.resolve(
+        __dirname,
+        'packages/harvester-core/src/index.ts',
+      ),
+      '@questoros-memory/publisher-core': path.resolve(
+        __dirname,
+        'packages/publisher-core/src/index.ts',
+      ),
+      '@questoros-memory/drive-google': path.resolve(
+        __dirname,
+        'packages/drive-google/src/index.ts',
+      ),
+      '@questoros-memory/sdk': path.resolve(__dirname, 'packages/sdk-typescript/src/index.ts'),
     },
   },
   test: {

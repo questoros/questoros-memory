@@ -38,3 +38,19 @@ export type {
   MemoryWithRevision,
   SearchMemoryRow,
 } from './memory.js';
+
+export {
+  hashContent,
+  insertHarvestRun,
+  updateHarvestRun,
+  getHarvestRun,
+  insertMemoryCandidate,
+  getMemoryCandidate,
+  listMemoryCandidates,
+  updateMemoryCandidate,
+  insertPublishedArtifact,
+  getPublishedArtifact,
+  updatePublishedArtifact,
+  insertSourceArtifact,
+} from './harvest.js';
+export type { HarvestRunRow, MemoryCandidateRow, PublishedArtifactRow } from './harvest.js';

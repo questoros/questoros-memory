@@ -19,6 +19,11 @@ export const MEMORY_TYPES = [
   'EVENT',
   'SUMMARY',
   'INSTRUCTION',
+  'GOAL',
+  'CONSTRAINT',
+  'ACTION_RESULT',
+  'CHECKPOINT',
+  'ARTIFACT_SUMMARY',
 ] as const;
 export type MemoryType = (typeof MEMORY_TYPES)[number];
 
@@ -43,8 +48,40 @@ export const SOURCE_TYPES = [
   'API',
   'MANUAL',
   'SYSTEM',
+  'DRIVE',
+  'UPLOAD',
+  'HARVEST',
 ] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
+
+// ── Candidate statuses ───────────────────────────────────────
+export const CANDIDATE_STATUSES = [
+  'PENDING',
+  'APPROVED',
+  'REJECTED',
+  'CONFLICT',
+  'DUPLICATE',
+  'NEAR_DUPLICATE',
+] as const;
+export type CandidateStatus = (typeof CANDIDATE_STATUSES)[number];
+
+// ── Harvest run statuses ─────────────────────────────────────
+export const HARVEST_RUN_STATUSES = ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED'] as const;
+export type HarvestRunStatus = (typeof HARVEST_RUN_STATUSES)[number];
+
+// ── Publish sync directions / statuses ───────────────────────
+export const SYNC_DIRECTIONS = ['EXPORT_ONLY', 'IMPORT_ONLY', 'BIDIRECTIONAL_REVIEWED'] as const;
+export type SyncDirection = (typeof SYNC_DIRECTIONS)[number];
+
+export const SYNC_STATUSES = [
+  'PENDING',
+  'PUBLISHED',
+  'EXTERNAL_CHANGED',
+  'SYNC_CONFLICT',
+  'REPUBLISHED',
+  'FAILED',
+] as const;
+export type SyncStatus = (typeof SYNC_STATUSES)[number];
 
 // ── Audit outcomes ───────────────────────────────────────────
 export const AUDIT_OUTCOMES = ['SUCCESS', 'DENIED', 'FAILED'] as const;

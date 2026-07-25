@@ -15,7 +15,9 @@
     "@prisma/client": "^6.7.0",
     "@questoros-memory/memory-core": "workspace:*",
     "@questoros-memory/database": "workspace:*",
-    "@questoros-memory/embedding-provider": "workspace:*"
+    "@questoros-memory/embedding-provider": "workspace:*",
+    "@questoros-memory/harvester-core": "workspace:*",
+    "@questoros-memory/publisher-core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
