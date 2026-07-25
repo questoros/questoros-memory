@@ -677,8 +677,22 @@ export const harvestRunIdParamsSchema = z
 export const approveCandidateRequestSchema = z
   .object({
     reason: boundedStringBytes(MAX_REASON_BYTES, 'reason').optional(),
+    /** Explicit admin override when policyAllowed=false. Requires memory:admin. */
+    overridePolicy: z.boolean().optional(),
+    overrideReason: boundedStringBytes(MAX_REASON_BYTES, 'overrideReason').optional(),
+    /** Explicit merge for DUPLICATE / NEAR_DUPLICATE candidates. */
+    mergeIntoMemoryId: uuidSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.overridePolicy === true && !value.overrideReason?.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['overrideReason'],
+        message: 'overrideReason is required when overridePolicy is true.',
+      });
+    }
+  });
 
 export const rejectCandidateRequestSchema = z
   .object({
@@ -708,7 +722,7 @@ export const publishArtifactRequestSchema = z
     projectId: uuidSchema.optional(),
     artifactType: z.string().trim().min(1).max(128).default('INTELLIGENCE_BRIEF'),
     title: titleSchema,
-    content: contentStringSchema('content'),
+    content: contentStringSchema('content').optional(),
     sourceMemoryIds: z.array(uuidSchema).max(MAX_RELATED_MEMORY_IDS).default([]),
     sourceRevisionIds: z.array(uuidSchema).max(MAX_RELATED_MEMORY_IDS).default([]),
     provider: z
@@ -734,7 +748,9 @@ export const publishedArtifactIdParamsSchema = z
 
 export const republishArtifactRequestSchema = z
   .object({
-    content: contentStringSchema('content'),
+    approvedCandidateId: uuidSchema,
+    sourceMemoryIds: z.array(uuidSchema).max(MAX_RELATED_MEMORY_IDS).min(1),
+    sourceRevisionIds: z.array(uuidSchema).max(MAX_RELATED_MEMORY_IDS).min(1),
     reasoningChainId: uuidSchema.optional(),
   })
   .strict();

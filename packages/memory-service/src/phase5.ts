@@ -60,7 +60,18 @@ export function __resetDriveBackends(): void {
 }
 
 function resolveDriveBackend(provider: string): DriveBackend {
-  return driveBackends.get(provider) ?? stubDrive;
+  const backend = driveBackends.get(provider);
+  if (backend) {
+    return backend;
+  }
+  if (provider === 'stub') {
+    return stubDrive;
+  }
+  throw new ServiceError(
+    ERROR_CODES.DRIVE_NOT_CONFIGURED,
+    `Drive provider is not configured: ${provider}`,
+    503,
+  );
 }
 
 let harvestReasoning: ReasoningProvider = new MockReasoningProvider();
@@ -428,15 +439,24 @@ export async function createHarvestRun(
 
     return { run: serializeHarvestRun(completed), candidates, reasoningChainId };
   } catch (error) {
+    await repo.rejectMemoryCandidatesForHarvestRun(
+      prisma,
+      auth.tenantId,
+      run.id,
+      'Harvest run failed; candidates are non-reviewable until explicit recovery.',
+    );
     await repo.updateHarvestRun(prisma, auth.tenantId, run.id, {
       status: 'FAILED',
       errorMessage: 'Harvest run failed.',
       completedAt: new Date(),
       metadata: mergeMemoryMetadata({
-        metadata: { requestId: requestId ?? null },
+        metadata: {
+          requestId: requestId ?? null,
+          candidatesNonReviewable: true,
+        },
         icareStage: 'ANALYSIS',
         reasoningChainId,
-        outcomeSummary: 'Harvest run failed before recommendations were persisted.',
+        outcomeSummary: 'Harvest run failed; partial candidates marked non-reviewable.',
       }),
     });
     throw error;
@@ -530,32 +550,84 @@ export async function approveCandidate(
   requirePermission(auth, 'memory:review');
   parseContract(candidateIdParamsSchema, { candidateId });
   const input = parseContract(approveCandidateRequestSchema, body ?? {});
-  const row = await repo.getMemoryCandidate(prisma, auth.tenantId, candidateId);
-  if (!row) {
+
+  const existing = await repo.getMemoryCandidate(prisma, auth.tenantId, candidateId);
+  if (!existing) {
     throw new ServiceError(ERROR_CODES.MEMORY_NOT_FOUND, 'Candidate not found.', 404);
   }
   enforceMemoryScope(
     auth.credentialScope,
-    row.scopeType,
-    row.scopeId,
-    row.workspaceId,
-    row.projectId,
+    existing.scopeType,
+    existing.scopeId,
+    existing.workspaceId,
+    existing.projectId,
   );
-  if (row.status === 'APPROVED' || row.status === 'REJECTED') {
-    throw new ServiceError(ERROR_CODES.CONFLICT, 'Candidate has already been reviewed.', 409);
+
+  const harvestRun = await repo.getHarvestRun(prisma, auth.tenantId, existing.harvestRunId);
+  if (!harvestRun || harvestRun.status !== 'COMPLETED') {
+    throw new ServiceError(
+      ERROR_CODES.CONFLICT,
+      'Candidates from incomplete or failed harvest runs cannot be approved.',
+      409,
+    );
   }
 
-  const relatedIds = Array.isArray(row.relatedMemoryIds) ? (row.relatedMemoryIds as string[]) : [];
-  const normalizedContent = normalizeContent(row.content);
+  const candidateMeta = asMetadataRecord(existing.metadata);
+  const ownershipRaw = candidateMeta.ownershipClassification;
+  const ownership = typeof ownershipRaw === 'string' ? ownershipRaw : '';
+  if (ownership === 'PRIVATE' || ownership === 'TRANSIENT') {
+    throw new ServiceError(
+      ERROR_CODES.PERMISSION_DENIED,
+      'Private or transient candidates cannot be promoted to authoritative memory.',
+      403,
+    );
+  }
+
+  const policyAllowed = candidateMeta.policyAllowed !== false;
+  if (!policyAllowed) {
+    if (input.overridePolicy !== true) {
+      throw new ServiceError(
+        ERROR_CODES.PERMISSION_DENIED,
+        'Candidate policy disallowed approval without an explicit admin override.',
+        403,
+      );
+    }
+    if (!hasPermission(auth.permissions, 'memory:admin')) {
+      throw new ServiceError(
+        ERROR_CODES.PERMISSION_DENIED,
+        'Policy override requires memory:admin.',
+        403,
+      );
+    }
+  }
+
+  if (
+    (existing.status === 'DUPLICATE' || existing.status === 'NEAR_DUPLICATE') &&
+    !input.mergeIntoMemoryId
+  ) {
+    throw new ServiceError(
+      ERROR_CODES.VALIDATION_ERROR,
+      'Duplicate or near-duplicate approval requires explicit mergeIntoMemoryId.',
+      400,
+    );
+  }
+
+  const relatedIds = Array.isArray(existing.relatedMemoryIds)
+    ? (existing.relatedMemoryIds as string[])
+    : [];
+  const normalizedContent = normalizeContent(existing.content);
   const contentHash = hashContent(normalizedContent);
-  const candidateMeta = asMetadataRecord(row.metadata);
   const reasoningChainId = resolveReasoningChainId(candidateMeta);
-  const durableStage = durableStageForMemoryType(row.memoryType);
+  const durableStage = durableStageForMemoryType(existing.memoryType);
   const approvedMetadata = mergeMemoryMetadata({
     metadata: {
-      harvestCandidateId: row.id,
-      harvestRunId: row.harvestRunId,
+      harvestCandidateId: existing.id,
+      harvestRunId: existing.harvestRunId,
       harvestRecommendation: candidateMeta.harvestRecommendation ?? null,
+      ownershipClassification: ownership || 'PROJECT',
+      policyAllowed,
+      policyOverride: input.overridePolicy === true,
+      policyOverrideReason: input.overrideReason ?? null,
     },
     icareStage: durableStage,
     reasoningChainId,
@@ -564,103 +636,149 @@ export async function approveCandidate(
     outcomeSummary: input.reason ?? 'Candidate approved after recommendation evaluation.',
   });
 
-  const memory = await withTransaction(
+  const result = await withTransaction(
     prisma,
     async (tx) => {
-      if (row.status === 'CONFLICT' && relatedIds[0]) {
-        const existing = await repo.getMemory(tx, auth.tenantId, relatedIds[0]);
-        if (!existing || existing.status === 'DELETED') {
+      const claimed = await repo.claimMemoryCandidateForReview(tx, auth.tenantId, candidateId);
+      if (!claimed) {
+        throw new ServiceError(
+          ERROR_CODES.CONFLICT,
+          'Candidate has already been reviewed or is being reviewed.',
+          409,
+        );
+      }
+
+      let memory: repo.MemoryRow;
+      if (existing.status === 'CONFLICT' && relatedIds[0]) {
+        const targetId = relatedIds[0];
+        const related = await repo.getMemory(tx, auth.tenantId, targetId);
+        if (!related || related.status === 'DELETED') {
           throw new ServiceError(
             ERROR_CODES.MEMORY_NOT_FOUND,
             'Related memory for conflict resolution was not found.',
             404,
           );
         }
-        const rev = (await repo.getMaxRevisionNumber(tx, auth.tenantId, existing.id)) + 1;
-        await repo.insertRevision(tx, {
-          tenantId: auth.tenantId,
-          memoryId: existing.id,
-          revisionNumber: rev,
-          content: existing.content,
-          contentHash: existing.contentHash,
-          reason: input.reason ?? 'Approved harvest candidate correction.',
-          createdByActorId: auth.actorId,
-        });
-        await repo.deleteEmbeddingsForMemory(tx, auth.tenantId, existing.id);
-        const existingMeta = asMetadataRecord(existing.metadata);
-        return repo.updateMemory(tx, auth.tenantId, existing.id, {
+        // Align with correctMemory: update current content, then record NEW content as next revision.
+        // Prior content remains in earlier revisions (e.g. revision 1 from create).
+        const nextRev = (await repo.getMaxRevisionNumber(tx, auth.tenantId, related.id)) + 1;
+        const relatedMeta = asMetadataRecord(related.metadata);
+        memory = await repo.updateMemory(tx, auth.tenantId, related.id, {
           content: normalizedContent,
           contentHash,
           metadata: mergeMemoryMetadata({
             metadata: {
-              ...existingMeta,
+              ...relatedMeta,
               ...approvedMetadata,
-              correctedFromCandidateId: row.id,
+              correctedFromCandidateId: claimed.id,
             },
             icareStage: durableStage,
             reasoningChainId,
             relatedMemoryIds: relatedIds,
-            evaluationTargetMemoryId: existing.id,
+            evaluationTargetMemoryId: related.id,
             outcomeSummary: input.reason ?? 'Conflict resolved via approved candidate correction.',
           }),
         });
+        await repo.insertRevision(tx, {
+          tenantId: auth.tenantId,
+          memoryId: related.id,
+          revisionNumber: nextRev,
+          content: normalizedContent,
+          contentHash,
+          reason: input.reason ?? 'Approved harvest candidate correction.',
+          createdByActorId: auth.actorId,
+        });
+        await repo.deleteEmbeddingsForMemory(tx, auth.tenantId, related.id);
+      } else if (
+        (existing.status === 'DUPLICATE' || existing.status === 'NEAR_DUPLICATE') &&
+        input.mergeIntoMemoryId
+      ) {
+        const target = await repo.getMemory(tx, auth.tenantId, input.mergeIntoMemoryId);
+        if (!target || target.status !== 'ACTIVE') {
+          throw new ServiceError(
+            ERROR_CODES.MEMORY_NOT_FOUND,
+            'mergeIntoMemoryId must reference an active memory.',
+            404,
+          );
+        }
+        enforceMemoryScope(
+          auth.credentialScope,
+          target.scopeType,
+          target.scopeId,
+          target.workspaceId,
+          target.projectId,
+        );
+        memory = target;
+      } else {
+        memory = await repo.insertMemory(tx, {
+          tenantId: auth.tenantId,
+          workspaceId: claimed.workspaceId,
+          projectId: claimed.projectId,
+          actorId: auth.actorId,
+          sourceArtifactId: claimed.sourceArtifactId,
+          scopeType: claimed.scopeType,
+          scopeId: claimed.scopeId,
+          memoryType: claimed.memoryType,
+          content: normalizedContent,
+          contentHash,
+          importance: 0.5,
+          confidence: Number(claimed.confidence),
+          sensitivity: 'STANDARD',
+          validFrom: new Date(),
+          validUntil: null,
+          metadata: approvedMetadata,
+        });
+        await repo.insertRevision(tx, {
+          tenantId: auth.tenantId,
+          memoryId: memory.id,
+          revisionNumber: 1,
+          content: normalizedContent,
+          contentHash,
+          reason: input.reason ?? 'Approved harvest candidate create.',
+          createdByActorId: auth.actorId,
+        });
       }
 
-      return repo.insertMemory(tx, {
-        tenantId: auth.tenantId,
-        workspaceId: row.workspaceId,
-        projectId: row.projectId,
-        actorId: auth.actorId,
-        sourceArtifactId: row.sourceArtifactId,
-        scopeType: row.scopeType,
-        scopeId: row.scopeId,
-        memoryType: row.memoryType,
-        content: normalizedContent,
-        contentHash,
-        importance: 0.5,
-        confidence: Number(row.confidence),
-        sensitivity: 'STANDARD',
-        validFrom: new Date(),
-        validUntil: null,
-        metadata: approvedMetadata,
+      const updated = await repo.updateMemoryCandidate(tx, auth.tenantId, candidateId, {
+        status: 'APPROVED',
+        approvedMemoryId: memory.id,
+        reviewReason: input.reason ?? null,
+        reviewedAt: new Date(),
       });
+
+      await repo.insertAuditEvent(tx, {
+        tenantId: auth.tenantId,
+        workspaceId: claimed.workspaceId,
+        projectId: claimed.projectId,
+        actorId: auth.actorId,
+        memoryId: memory.id,
+        action: 'CANDIDATE_APPROVE',
+        outcome: 'SUCCESS',
+        requestId: requestId ?? null,
+        reason: input.reason ?? null,
+        metadata: {
+          candidateId,
+          icareStage: 'RECOMMENDATION_EVALUATION',
+          reasoningChainId,
+          executionFollowUpStage: durableStage,
+          policyOverride: input.overridePolicy === true,
+          policyOverrideReason: input.overrideReason ?? null,
+        },
+      });
+
+      return { candidate: updated, memory };
     },
     'approveCandidate',
   );
 
-  const updated = await repo.updateMemoryCandidate(prisma, auth.tenantId, candidateId, {
-    status: 'APPROVED',
-    approvedMemoryId: memory.id,
-    reviewReason: input.reason ?? null,
-    reviewedAt: new Date(),
-  });
-
-  await repo.insertAuditEvent(prisma, {
-    tenantId: auth.tenantId,
-    workspaceId: row.workspaceId,
-    projectId: row.projectId,
-    actorId: auth.actorId,
-    memoryId: memory.id,
-    action: 'CANDIDATE_APPROVE',
-    outcome: 'SUCCESS',
-    requestId: requestId ?? null,
-    reason: input.reason ?? null,
-    metadata: {
-      candidateId,
-      icareStage: 'RECOMMENDATION_EVALUATION',
-      reasoningChainId,
-      executionFollowUpStage: durableStage,
-    },
-  });
-
   return {
-    candidate: serializeCandidate(updated),
+    candidate: serializeCandidate(result.candidate),
     memory: {
-      id: memory.id,
-      memoryType: memory.memoryType,
-      content: memory.content,
-      status: memory.status,
-      metadata: memory.metadata,
+      id: result.memory.id,
+      memoryType: result.memory.memoryType,
+      content: result.memory.content,
+      status: result.memory.status,
+      metadata: result.memory.metadata,
     },
     reasoningChainId,
   };
@@ -676,48 +794,59 @@ export async function rejectCandidate(
   requirePermission(auth, 'memory:review');
   parseContract(candidateIdParamsSchema, { candidateId });
   const input = parseContract(rejectCandidateRequestSchema, body ?? {});
-  const row = await repo.getMemoryCandidate(prisma, auth.tenantId, candidateId);
-  if (!row) {
+  const existing = await repo.getMemoryCandidate(prisma, auth.tenantId, candidateId);
+  if (!existing) {
     throw new ServiceError(ERROR_CODES.MEMORY_NOT_FOUND, 'Candidate not found.', 404);
   }
   enforceMemoryScope(
     auth.credentialScope,
-    row.scopeType,
-    row.scopeId,
-    row.workspaceId,
-    row.projectId,
+    existing.scopeType,
+    existing.scopeId,
+    existing.workspaceId,
+    existing.projectId,
   );
-  if (row.status === 'APPROVED' || row.status === 'REJECTED') {
-    throw new ServiceError(ERROR_CODES.CONFLICT, 'Candidate has already been reviewed.', 409);
-  }
 
-  const candidateMeta = asMetadataRecord(row.metadata);
+  const candidateMeta = asMetadataRecord(existing.metadata);
   const reasoningChainId = resolveReasoningChainId(candidateMeta);
 
-  const updated = await repo.updateMemoryCandidate(prisma, auth.tenantId, candidateId, {
-    status: 'REJECTED',
-    reviewReason: input.reason,
-    reviewedAt: new Date(),
-  });
-
-  await repo.insertAuditEvent(prisma, {
-    tenantId: auth.tenantId,
-    workspaceId: row.workspaceId,
-    projectId: row.projectId,
-    actorId: auth.actorId,
-    memoryId: null,
-    action: 'CANDIDATE_REJECT',
-    outcome: 'SUCCESS',
-    requestId: requestId ?? null,
-    reason: input.reason,
-    metadata: {
-      candidateId,
-      icareStage: 'RECOMMENDATION_EVALUATION',
-      reasoningChainId,
-      evaluationOutcome: 'rejected',
-      outcomeSummary: input.reason,
+  const updated = await withTransaction(
+    prisma,
+    async (tx) => {
+      const claimed = await repo.claimMemoryCandidateForReview(tx, auth.tenantId, candidateId);
+      if (!claimed) {
+        throw new ServiceError(
+          ERROR_CODES.CONFLICT,
+          'Candidate has already been reviewed or is being reviewed.',
+          409,
+        );
+      }
+      const rejected = await repo.updateMemoryCandidate(tx, auth.tenantId, candidateId, {
+        status: 'REJECTED',
+        reviewReason: input.reason,
+        reviewedAt: new Date(),
+      });
+      await repo.insertAuditEvent(tx, {
+        tenantId: auth.tenantId,
+        workspaceId: claimed.workspaceId,
+        projectId: claimed.projectId,
+        actorId: auth.actorId,
+        memoryId: null,
+        action: 'CANDIDATE_REJECT',
+        outcome: 'SUCCESS',
+        requestId: requestId ?? null,
+        reason: input.reason,
+        metadata: {
+          candidateId,
+          icareStage: 'RECOMMENDATION_EVALUATION',
+          reasoningChainId,
+          evaluationOutcome: 'rejected',
+          outcomeSummary: input.reason,
+        },
+      });
+      return rejected;
     },
-  });
+    'rejectCandidate',
+  );
 
   return { candidate: serializeCandidate(updated), reasoningChainId };
 }
@@ -815,6 +944,127 @@ export async function createContextPackage(prisma: PrismaClient, auth: AuthConte
   };
 }
 
+async function validatePublicationProvenance(
+  prisma: PrismaClient,
+  auth: AuthContext,
+  requested: { scopeType: string; workspaceId: string | null; projectId: string | null },
+  sourceMemoryIds: string[],
+  sourceRevisionIds: string[],
+): Promise<{
+  memories: repo.MemoryRow[];
+  revisions: repo.RevisionRow[];
+}> {
+  if (sourceRevisionIds.length > 0 && sourceMemoryIds.length === 0) {
+    throw new ServiceError(
+      ERROR_CODES.VALIDATION_ERROR,
+      'sourceRevisionIds require corresponding sourceMemoryIds.',
+      400,
+    );
+  }
+
+  const memories: repo.MemoryRow[] = [];
+  for (const memoryId of sourceMemoryIds) {
+    const memory = await repo.getMemory(prisma, auth.tenantId, memoryId, true);
+    if (!memory) {
+      throw new ServiceError(
+        ERROR_CODES.MEMORY_NOT_FOUND,
+        'Source memory not found for publication.',
+        404,
+      );
+    }
+    if (memory.tenantId !== auth.tenantId) {
+      throw new ServiceError(ERROR_CODES.SCOPE_DENIED, 'Cross-tenant source memory rejected.', 403);
+    }
+    try {
+      enforceMemoryScope(
+        auth.credentialScope,
+        memory.scopeType,
+        memory.scopeId,
+        memory.workspaceId,
+        memory.projectId,
+      );
+    } catch {
+      throw new ServiceError(
+        ERROR_CODES.SCOPE_DENIED,
+        'Source memory is outside credential scope.',
+        403,
+      );
+    }
+    if (
+      requested.scopeType === 'PROJECT' &&
+      (memory.workspaceId !== requested.workspaceId || memory.projectId !== requested.projectId)
+    ) {
+      throw new ServiceError(
+        ERROR_CODES.SCOPE_DENIED,
+        'Source memory does not match publication project scope.',
+        403,
+      );
+    }
+    if (requested.scopeType === 'WORKSPACE' && memory.workspaceId !== requested.workspaceId) {
+      throw new ServiceError(
+        ERROR_CODES.SCOPE_DENIED,
+        'Source memory does not match publication workspace scope.',
+        403,
+      );
+    }
+    if (memory.status === 'DELETED') {
+      throw new ServiceError(
+        ERROR_CODES.MEMORY_DELETED,
+        'Deleted memories cannot be published.',
+        400,
+      );
+    }
+    if (memory.status !== 'ACTIVE') {
+      throw new ServiceError(
+        ERROR_CODES.VALIDATION_ERROR,
+        'Only ACTIVE memories can be published.',
+        400,
+      );
+    }
+    if (memory.sensitivity === 'RESTRICTED') {
+      throw new ServiceError(
+        ERROR_CODES.PERMISSION_DENIED,
+        'RESTRICTED memories cannot be published.',
+        403,
+      );
+    }
+    const meta = asMetadataRecord(memory.metadata);
+    const ownershipRaw = meta.ownershipClassification;
+    const ownership = typeof ownershipRaw === 'string' ? ownershipRaw : '';
+    if (ownership === 'PRIVATE' || ownership === 'TRANSIENT') {
+      throw new ServiceError(
+        ERROR_CODES.PERMISSION_DENIED,
+        'Private or transient memories cannot be published.',
+        403,
+      );
+    }
+    memories.push(memory);
+  }
+
+  const memoryIdSet = new Set(sourceMemoryIds);
+  const revisions: repo.RevisionRow[] = [];
+  for (const revisionId of sourceRevisionIds) {
+    const revision = await repo.getRevision(prisma, auth.tenantId, revisionId);
+    if (!revision) {
+      throw new ServiceError(
+        ERROR_CODES.VALIDATION_ERROR,
+        'Unknown source revision for publication.',
+        400,
+      );
+    }
+    if (!memoryIdSet.has(revision.memoryId)) {
+      throw new ServiceError(
+        ERROR_CODES.VALIDATION_ERROR,
+        'Source revision does not belong to a listed source memory.',
+        400,
+      );
+    }
+    revisions.push(revision);
+  }
+
+  return { memories, revisions };
+}
+
 export async function publishArtifact(
   prisma: PrismaClient,
   auth: AuthContext,
@@ -826,13 +1076,22 @@ export async function publishArtifact(
   const requested = resolveRequestedScope(input.scopeType, input.workspaceId, input.projectId);
   enforceScope(auth.credentialScope, requested);
 
-  if (input.content.toLowerCase().includes('password') || input.content.includes('AKIA')) {
+  const providedContent = input.content ?? '';
+  if (providedContent.toLowerCase().includes('password') || providedContent.includes('AKIA')) {
     throw new ServiceError(
       ERROR_CODES.PERMISSION_DENIED,
       'Refusing to publish content that appears to contain secrets.',
       403,
     );
   }
+
+  const { memories } = await validatePublicationProvenance(
+    prisma,
+    auth,
+    requested,
+    input.sourceMemoryIds,
+    input.sourceRevisionIds,
+  );
 
   const scopeId = scopeIdFor(
     requested.scopeType,
@@ -844,21 +1103,34 @@ export async function publishArtifact(
   const reasoningChainId = resolveReasoningChainId(input.metadata, input.reasoningChainId ?? null);
 
   const publishedContent =
-    input.artifactType === 'intelligence-brief' && !input.content.includes('ICARE³ lifecycle')
+    input.artifactType === 'intelligence-brief' || input.artifactType === 'INTELLIGENCE_BRIEF'
       ? renderIntelligenceBrief({
           title: input.title,
           projectName: input.title,
-          memories: input.sourceMemoryIds.map((id) => ({
-            id,
-            content: '(see authoritative memory)',
-            memoryType: 'FACT',
-            icareStage: 'CONTEXT',
-          })),
+          memories: memories.map((m) => {
+            const meta = asMetadataRecord(m.metadata);
+            const icare = extractIcareMetadata(meta);
+            return {
+              id: m.id,
+              content: m.content,
+              memoryType: m.memoryType,
+              icareStage: icare?.icareStage ?? durableStageForMemoryType(m.memoryType),
+            };
+          }),
           reasoningChainId,
         })
-      : input.content;
+      : providedContent;
 
-  const published = await resolveDriveBackend(input.provider).publish({
+  if (!publishedContent.trim()) {
+    throw new ServiceError(
+      ERROR_CODES.VALIDATION_ERROR,
+      'Publication content is required when not rendering an intelligence brief.',
+      400,
+    );
+  }
+
+  const drive = resolveDriveBackend(input.provider);
+  const published = await drive.publish({
     title: input.title,
     content: publishedContent,
     artifactType: input.artifactType,
@@ -900,7 +1172,7 @@ export async function publishArtifact(
         icareLifecycle: ICARE_PUBLIC_LIFECYCLE,
         driveId: published.driveId ?? input.driveId ?? null,
         siteId: published.siteId ?? input.siteId ?? null,
-        providerAccountBound: true,
+        providerAccountBound: input.provider !== 'stub',
       },
       icareStage: 'EXECUTION',
       reasoningChainId,
@@ -1007,7 +1279,10 @@ export async function syncPublishedArtifact(
       },
       { localContentHash: repo.hashContent(row.content) },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === ERROR_CODES.DRIVE_NOT_CONFIGURED) {
+      throw error;
+    }
     throw new ServiceError(ERROR_CODES.MEMORY_NOT_FOUND, 'External file not found.', 404);
   }
 
@@ -1031,6 +1306,7 @@ export async function syncPublishedArtifact(
         ...artifactMeta,
         lastExternalHash: change.contentHash,
         syncIssue: 'External Drive content diverged from lastSyncedContentHash.',
+        syncHarvestRunId: null,
       },
       icareStage: 'ISSUE',
       reasoningChainId,
@@ -1064,6 +1340,17 @@ export async function syncPublishedArtifact(
     requestId,
   );
 
+  const withHarvest = await repo.updatePublishedArtifact(prisma, auth.tenantId, artifactId, {
+    metadata: mergeMemoryMetadata({
+      metadata: {
+        ...asMetadataRecord(updated.metadata),
+        syncHarvestRunId: harvest.run.id,
+      },
+      icareStage: 'ISSUE',
+      reasoningChainId,
+    }),
+  });
+
   await repo.insertAuditEvent(prisma, {
     tenantId: auth.tenantId,
     workspaceId: row.workspaceId,
@@ -1088,7 +1375,7 @@ export async function syncPublishedArtifact(
   });
 
   return {
-    artifact: serializePublishedArtifact(updated),
+    artifact: serializePublishedArtifact(withHarvest),
     changed: true,
     harvest,
     reasoningChainId,
@@ -1119,66 +1406,185 @@ export async function republishArtifact(
   if (!row.externalFileId) {
     throw new ServiceError(ERROR_CODES.VALIDATION_ERROR, 'Artifact has no external file id.', 400);
   }
+  if (row.syncStatus !== 'EXTERNAL_CHANGED' && row.syncStatus !== 'SYNC_CONFLICT') {
+    throw new ServiceError(
+      ERROR_CODES.CONFLICT,
+      'Republish requires an EXTERNAL_CHANGED or SYNC_CONFLICT artifact.',
+      409,
+    );
+  }
 
   const artifactMeta = asMetadataRecord(row.metadata);
-  const reasoningChainId = resolveReasoningChainId(artifactMeta, input.reasoningChainId ?? null);
+  const syncHarvestRunId =
+    typeof artifactMeta.syncHarvestRunId === 'string' ? artifactMeta.syncHarvestRunId : null;
+  if (!syncHarvestRunId) {
+    throw new ServiceError(
+      ERROR_CODES.VALIDATION_ERROR,
+      'Artifact has no sync harvest run for governed republish.',
+      400,
+    );
+  }
 
-  const republished = await resolveDriveBackend(row.provider).republish(
-    {
-      provider: row.provider,
-      driveId: typeof artifactMeta.driveId === 'string' ? artifactMeta.driveId : null,
-      siteId: typeof artifactMeta.siteId === 'string' ? artifactMeta.siteId : null,
-      externalFileId: row.externalFileId,
-      externalUrl: row.externalUrl,
-      parentFolderId: row.parentFolderId,
-      artifactType: row.artifactType,
-      sourceMemoryIds: Array.isArray(row.sourceMemoryIds) ? (row.sourceMemoryIds as string[]) : [],
-      sourceRevisionIds: Array.isArray(row.sourceRevisionIds)
-        ? (row.sourceRevisionIds as string[])
-        : [],
-      publishedAt: row.publishedAt.toISOString(),
-      publishedBy: row.actorId ?? auth.actorId,
-      lastExternalModifiedAt: row.lastExternalModifiedAt?.toISOString() ?? null,
-      lastSyncedContentHash: row.lastSyncedContentHash,
-      syncDirection: row.syncDirection as 'EXPORT_ONLY' | 'IMPORT_ONLY' | 'BIDIRECTIONAL_REVIEWED',
-      syncStatus: row.syncStatus as
-        'PENDING' | 'PUBLISHED' | 'EXTERNAL_CHANGED' | 'SYNC_CONFLICT' | 'REPUBLISHED' | 'FAILED',
-      title: row.title,
-    },
-    input.content,
+  const candidate = await repo.getMemoryCandidate(prisma, auth.tenantId, input.approvedCandidateId);
+  if (!candidate) {
+    throw new ServiceError(ERROR_CODES.MEMORY_NOT_FOUND, 'Approved candidate not found.', 404);
+  }
+  if (candidate.status !== 'APPROVED') {
+    throw new ServiceError(ERROR_CODES.CONFLICT, 'Republish requires an APPROVED candidate.', 409);
+  }
+  if (candidate.harvestRunId !== syncHarvestRunId) {
+    throw new ServiceError(
+      ERROR_CODES.VALIDATION_ERROR,
+      'Candidate does not belong to this artifact sync harvest run.',
+      400,
+    );
+  }
+  enforceMemoryScope(
+    auth.credentialScope,
+    candidate.scopeType,
+    candidate.scopeId,
+    candidate.workspaceId,
+    candidate.projectId,
   );
 
-  const updated = await repo.updatePublishedArtifact(prisma, auth.tenantId, artifactId, {
-    content: input.content,
-    lastSyncedContentHash: republished.lastSyncedContentHash,
-    syncStatus: 'REPUBLISHED',
-    lastExternalModifiedAt: new Date(republished.lastExternalModifiedAt ?? Date.now()),
-    metadata: mergeMemoryMetadata({
-      metadata: { ...artifactMeta, requestId: requestId ?? null },
-      icareStage: 'EXECUTION',
-      reasoningChainId,
-      executionStatus: 'republished',
-      outcomeSummary: 'Authoritative content republished after governed approval.',
-      lessonsLearned: ['Republish only after recommendation evaluation and memory update.'],
-    }),
-  });
-  await repo.insertAuditEvent(prisma, {
-    tenantId: auth.tenantId,
+  const requested = {
+    scopeType: row.scopeType,
     workspaceId: row.workspaceId,
     projectId: row.projectId,
-    actorId: auth.actorId,
-    memoryId: null,
-    action: 'PUBLISH_REPUBLISH',
-    outcome: 'SUCCESS',
-    requestId: requestId ?? null,
-    reason: null,
-    metadata: {
-      artifactId,
-      icareStage: 'EXECUTION_EVALUATION',
-      reasoningChainId,
-    },
+  };
+  const { memories, revisions } = await validatePublicationProvenance(
+    prisma,
+    auth,
+    requested,
+    input.sourceMemoryIds,
+    input.sourceRevisionIds,
+  );
+
+  if (!candidate.approvedMemoryId || !input.sourceMemoryIds.includes(candidate.approvedMemoryId)) {
+    throw new ServiceError(
+      ERROR_CODES.VALIDATION_ERROR,
+      'sourceMemoryIds must include the candidate approved memory.',
+      400,
+    );
+  }
+
+  const approvedMemory = memories.find((m) => m.id === candidate.approvedMemoryId);
+  if (!approvedMemory || approvedMemory.status !== 'ACTIVE') {
+    throw new ServiceError(
+      ERROR_CODES.VALIDATION_ERROR,
+      'Approved memory must be active and listed in sourceMemoryIds.',
+      400,
+    );
+  }
+
+  const approvedRevision = revisions.find(
+    (r) => r.memoryId === approvedMemory.id && r.contentHash === approvedMemory.contentHash,
+  );
+  if (!approvedRevision) {
+    throw new ServiceError(
+      ERROR_CODES.VALIDATION_ERROR,
+      'sourceRevisionIds must include the approved authoritative revision.',
+      400,
+    );
+  }
+
+  const reasoningChainId = resolveReasoningChainId(artifactMeta, input.reasoningChainId ?? null);
+  const publishedContent = renderIntelligenceBrief({
+    title: row.title,
+    projectName: row.title,
+    memories: memories.map((m) => {
+      const meta = asMetadataRecord(m.metadata);
+      const icare = extractIcareMetadata(meta);
+      return {
+        id: m.id,
+        content: m.content,
+        memoryType: m.memoryType,
+        icareStage: icare?.icareStage ?? durableStageForMemoryType(m.memoryType),
+      };
+    }),
+    reasoningChainId,
   });
-  return { artifact: serializePublishedArtifact(updated), reasoningChainId };
+
+  const drive = resolveDriveBackend(row.provider);
+
+  const result = await withTransaction(
+    prisma,
+    async (tx) => {
+      const republished = await drive.republish(
+        {
+          provider: row.provider,
+          driveId: typeof artifactMeta.driveId === 'string' ? artifactMeta.driveId : null,
+          siteId: typeof artifactMeta.siteId === 'string' ? artifactMeta.siteId : null,
+          externalFileId: row.externalFileId!,
+          externalUrl: row.externalUrl,
+          parentFolderId: row.parentFolderId,
+          artifactType: row.artifactType,
+          sourceMemoryIds: input.sourceMemoryIds,
+          sourceRevisionIds: input.sourceRevisionIds,
+          publishedAt: row.publishedAt.toISOString(),
+          publishedBy: row.actorId ?? auth.actorId,
+          lastExternalModifiedAt: row.lastExternalModifiedAt?.toISOString() ?? null,
+          lastSyncedContentHash: row.lastSyncedContentHash,
+          syncDirection: row.syncDirection as
+            'EXPORT_ONLY' | 'IMPORT_ONLY' | 'BIDIRECTIONAL_REVIEWED',
+          syncStatus: row.syncStatus as
+            | 'PENDING'
+            | 'PUBLISHED'
+            | 'EXTERNAL_CHANGED'
+            | 'SYNC_CONFLICT'
+            | 'REPUBLISHED'
+            | 'FAILED',
+          title: row.title,
+        },
+        publishedContent,
+      );
+
+      const updated = await repo.updatePublishedArtifact(tx, auth.tenantId, artifactId, {
+        content: publishedContent,
+        sourceMemoryIds: input.sourceMemoryIds,
+        sourceRevisionIds: input.sourceRevisionIds,
+        lastSyncedContentHash: republished.lastSyncedContentHash,
+        syncStatus: 'REPUBLISHED',
+        lastExternalModifiedAt: new Date(republished.lastExternalModifiedAt ?? Date.now()),
+        metadata: mergeMemoryMetadata({
+          metadata: {
+            ...artifactMeta,
+            requestId: requestId ?? null,
+            approvedCandidateId: candidate.id,
+            syncHarvestRunId,
+          },
+          icareStage: 'EXECUTION',
+          reasoningChainId,
+          executionStatus: 'republished',
+          outcomeSummary: 'Authoritative content republished after governed approval.',
+          lessonsLearned: ['Republish only after recommendation evaluation and memory update.'],
+        }),
+      });
+
+      await repo.insertAuditEvent(tx, {
+        tenantId: auth.tenantId,
+        workspaceId: row.workspaceId,
+        projectId: row.projectId,
+        actorId: auth.actorId,
+        memoryId: approvedMemory.id,
+        action: 'PUBLISH_REPUBLISH',
+        outcome: 'SUCCESS',
+        requestId: requestId ?? null,
+        reason: null,
+        metadata: {
+          artifactId,
+          approvedCandidateId: candidate.id,
+          icareStage: 'EXECUTION_EVALUATION',
+          reasoningChainId,
+        },
+      });
+
+      return updated;
+    },
+    'republishArtifact',
+  );
+
+  return { artifact: serializePublishedArtifact(result), reasoningChainId };
 }
 
 /** Test helper: mutate stub external content (simulates Drive edit). */

@@ -57,6 +57,7 @@ export type SourceType = (typeof SOURCE_TYPES)[number];
 // ── Candidate statuses ───────────────────────────────────────
 export const CANDIDATE_STATUSES = [
   'PENDING',
+  'REVIEWING',
   'APPROVED',
   'REJECTED',
   'CONFLICT',

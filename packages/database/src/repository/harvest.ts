@@ -243,6 +243,64 @@ export async function updateMemoryCandidate(
   });
 }
 
+const REVIEWABLE_CANDIDATE_STATUSES = [
+  'PENDING',
+  'CONFLICT',
+  'DUPLICATE',
+  'NEAR_DUPLICATE',
+] as const;
+
+/**
+ * Compare-and-set claim: only one concurrent reviewer can move a reviewable
+ * candidate into REVIEWING. Returns null when the race is lost.
+ */
+export async function claimMemoryCandidateForReview(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  tenantId: string,
+  candidateId: string,
+): Promise<MemoryCandidateRow | null> {
+  const result = await prisma.memoryCandidate.updateMany({
+    where: {
+      tenantId,
+      id: candidateId,
+      status: { in: [...REVIEWABLE_CANDIDATE_STATUSES] },
+    },
+    data: {
+      status: 'REVIEWING',
+      updatedAt: new Date(),
+    },
+  });
+  if (result.count !== 1) {
+    return null;
+  }
+  return getMemoryCandidate(prisma, tenantId, candidateId);
+}
+
+/**
+ * Terminal reject CAS used when harvest fails or an explicit reject wins the race.
+ */
+export async function rejectMemoryCandidatesForHarvestRun(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  tenantId: string,
+  harvestRunId: string,
+  reason: string,
+): Promise<number> {
+  const result = await prisma.memoryCandidate.updateMany({
+    where: {
+      tenantId,
+      harvestRunId,
+      status: { in: [...REVIEWABLE_CANDIDATE_STATUSES, 'REVIEWING'] },
+    },
+    data: {
+      status: 'REJECTED',
+      reviewReason: reason,
+      reviewedAt: new Date(),
+      updatedAt: new Date(),
+    },
+  });
+  return result.count;
+}
+
 export async function insertPublishedArtifact(
   prisma: PrismaClient | Prisma.TransactionClient,
   input: {
