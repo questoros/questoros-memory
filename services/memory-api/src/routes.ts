@@ -10,6 +10,7 @@ import {
   transportDeleteMemory,
   transportRevisionHistory,
   transportUpsertEmbedding,
+  transportGenerateEmbedding,
   transportReadyz,
 } from '@questoros-memory/memory-service';
 
@@ -164,6 +165,22 @@ export function registerRoutes(app: FastifyInstance): void {
         extractToken(request),
         params.memoryId,
         request.body,
+        requestId,
+      );
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleError(reply, error, requestId);
+    }
+  });
+
+  app.post('/v1/memories/:memoryId/embedding/generate', async (request, reply) => {
+    const requestId = request.id as string;
+    try {
+      const params = parseContract(memoryIdParamsSchema, request.params);
+      const result = await transportGenerateEmbedding(
+        extractToken(request),
+        params.memoryId,
+        request.body ?? {},
         requestId,
       );
       return reply.status(200).send(result);

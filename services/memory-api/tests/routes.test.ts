@@ -14,6 +14,7 @@ const mockCorrect = vi.fn();
 const mockDelete = vi.fn();
 const mockHistory = vi.fn();
 const mockEmbed = vi.fn();
+const mockGenerate = vi.fn();
 const mockReadyz = vi.fn();
 
 vi.mock('@questoros-memory/memory-service', () => ({
@@ -26,6 +27,7 @@ vi.mock('@questoros-memory/memory-service', () => ({
   transportDeleteMemory: (...args: unknown[]) => mockDelete(...args),
   transportRevisionHistory: (...args: unknown[]) => mockHistory(...args),
   transportUpsertEmbedding: (...args: unknown[]) => mockEmbed(...args),
+  transportGenerateEmbedding: (...args: unknown[]) => mockGenerate(...args),
   transportReadyz: (...args: unknown[]) => mockReadyz(...args),
 }));
 
@@ -120,6 +122,16 @@ describe('REST routes', () => {
       },
     ]);
     mockEmbed.mockResolvedValue({ status: 'ok' });
+    mockGenerate.mockResolvedValue({
+      memoryId: MEMORY_ID,
+      provider: 'amazon-bedrock',
+      modelId: 'amazon.titan-embed-text-v2:0',
+      dimensions: 1024,
+      normalized: true,
+      inputTokenCount: 4,
+      generated: true,
+      reused: false,
+    });
   });
 
   it('GET /healthz returns ok without authentication', async () => {
@@ -278,6 +290,54 @@ describe('REST routes', () => {
       },
     });
     expect(embed.statusCode).toBe(200);
+
+    const generate = await app.inject({
+      method: 'POST',
+      url: `/v1/memories/${MEMORY_ID}/embedding/generate`,
+      headers: { ...authHeader(), 'content-type': 'application/json' },
+      payload: { force: false },
+    });
+    expect(generate.statusCode).toBe(200);
+    expect(generate.json()).toMatchObject({
+      memoryId: MEMORY_ID,
+      generated: true,
+      reused: false,
+      dimensions: 1024,
+      normalized: true,
+    });
+    expect(JSON.stringify(generate.json())).not.toContain('0.01');
+    expect(mockGenerate).toHaveBeenCalled();
+
+    mockGenerate.mockResolvedValueOnce({
+      memoryId: MEMORY_ID,
+      provider: 'amazon-bedrock',
+      modelId: 'amazon.titan-embed-text-v2:0',
+      dimensions: 1024,
+      normalized: true,
+      inputTokenCount: null,
+      generated: false,
+      reused: true,
+    });
+    const reused = await app.inject({
+      method: 'POST',
+      url: `/v1/memories/${MEMORY_ID}/embedding/generate`,
+      headers: { ...authHeader(), 'content-type': 'application/json' },
+      payload: { force: false },
+    });
+    expect(reused.json().reused).toBe(true);
+
+    mockGenerate.mockRejectedValueOnce(
+      new ServiceError(ERROR_CODES.EMBEDDING_PROVIDER_THROTTLED, 'throttled', 429),
+    );
+    const throttled = await app.inject({
+      method: 'POST',
+      url: `/v1/memories/${MEMORY_ID}/embedding/generate`,
+      headers: { ...authHeader(), 'content-type': 'application/json' },
+      payload: { force: true },
+    });
+    expect(throttled.statusCode).toBe(429);
+    expect(throttled.json().error.code).toBe('EMBEDDING_PROVIDER_THROTTLED');
+    expect(throttled.json().error.requestId).toBeTruthy();
     await app.close();
   });
 
