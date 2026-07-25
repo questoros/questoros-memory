@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const infraRoot = path.resolve(scriptDir, '..');
 const repoRoot = path.resolve(infraRoot, '..', '..');
-const schemaPath = path.join(repoRoot, 'packages', 'database', 'prisma', 'schema.prisma');
-const generatedDir = path.join(infraRoot, '.generated');
+const databaseRoot = path.join(repoRoot, 'packages', 'database');
+const schemaPath = path.join(databaseRoot, 'prisma', 'schema.prisma');
+const generatedDir = path.join(databaseRoot, 'prisma', '.generated');
 const generatedSchemaPath = path.join(generatedDir, 'schema.lambda.prisma');
 
 const source = fs.readFileSync(schemaPath, 'utf8');
@@ -29,17 +30,9 @@ fs.writeFileSync(generatedSchemaPath, lambdaSchema, 'utf8');
 const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const result = spawnSync(
   command,
-  [
-    '--filter',
-    '@questoros-memory/database',
-    'exec',
-    'prisma',
-    'generate',
-    '--schema',
-    generatedSchemaPath,
-  ],
+  ['exec', 'prisma', 'generate', '--schema', generatedSchemaPath],
   {
-    cwd: repoRoot,
+    cwd: databaseRoot,
     env: process.env,
     encoding: 'utf8',
     stdio: 'inherit',
