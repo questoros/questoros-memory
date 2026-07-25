@@ -619,7 +619,7 @@ export async function searchByVector(
   const meta = buildSearchMetadataConditions(input);
 
   const conditions: Prisma.Sql[] = [
-    Prisma.sql`m.tenant_id = ${input.tenantId}::uuid`,
+    Prisma.sql`me.tenant_id = ${input.tenantId}::uuid`,
     Prisma.sql`me.scope_type = ${input.scopeType}`,
     Prisma.sql`me.scope_id = ${input.scopeId}::uuid`,
     Prisma.sql`m.status = 'ACTIVE'`,

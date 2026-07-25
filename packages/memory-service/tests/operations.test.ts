@@ -597,3 +597,317 @@ describe('ServiceError propagation', () => {
     ).rejects.toBeInstanceOf(ServiceError);
   });
 });
+
+describe('createMemory conflict and embedding paths', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(repo.insertMemory).mockImplementation(async (_tx, input) =>
+      makeMemory({
+        content: input.content,
+        contentHash: input.contentHash,
+        scopeType: input.scopeType,
+        scopeId: input.scopeId,
+        workspaceId: input.workspaceId,
+        projectId: input.projectId,
+      }),
+    );
+    vi.mocked(repo.insertRevision).mockResolvedValue({
+      id: 'rev-1',
+      tenantId: TENANT_ID,
+      memoryId: MEMORY_ID,
+      revisionNumber: 1,
+      content: 'x',
+      contentHash: 'f'.repeat(64),
+      reason: 'Initial creation',
+      createdByActorId: ACTOR_ID,
+      createdAt: new Date(),
+    });
+  });
+
+  it('rejects duplicate active content hash with MEMORY_DUPLICATE', async () => {
+    vi.mocked(repo.findActiveMemoryByContentHash).mockResolvedValue(makeMemory());
+    await expect(
+      createMemory(mockPrisma, tenantAuth(), {
+        scopeType: 'TENANT',
+        memoryType: 'FACT',
+        content: 'Baseline content.',
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.MEMORY_DUPLICATE, statusCode: 409 });
+  });
+
+  it('upserts embedding during create when provided', async () => {
+    vi.mocked(repo.findActiveMemoryByContentHash).mockResolvedValue(null);
+    await createMemory(mockPrisma, projectAuth(), {
+      scopeType: 'PROJECT',
+      workspaceId: WORKSPACE_ID,
+      projectId: PROJECT_ID,
+      memoryType: 'FACT',
+      content: 'Project memory with embedding.',
+      embedding: validEmbedding(),
+    });
+    expect(repo.upsertEmbedding).toHaveBeenCalledWith(
+      mockTx,
+      expect.objectContaining({
+        memoryId: MEMORY_ID,
+        scopeType: 'PROJECT',
+        scopeId: PROJECT_ID,
+      }),
+    );
+  });
+
+  it('rejects create when related memory is missing', async () => {
+    vi.mocked(repo.findActiveMemoryByContentHash).mockResolvedValue(null);
+    vi.mocked(repo.getMemory).mockResolvedValue(null);
+    await expect(
+      createMemory(mockPrisma, tenantAuth(), {
+        scopeType: 'TENANT',
+        memoryType: 'FACT',
+        content: 'Needs related memory.',
+        icareStage: 'CONTEXT',
+        relatedMemoryIds: [RELATED_ID],
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR, statusCode: 400 });
+  });
+});
+
+describe('listMemories pagination and explicit scope', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns nextCursor when more than limit rows are available', async () => {
+    const first = makeMemory({
+      id: MEMORY_ID,
+      updatedAt: new Date('2026-07-24T12:00:00.000Z'),
+    });
+    const second = makeMemory({
+      id: RELATED_ID,
+      updatedAt: new Date('2026-07-24T11:00:00.000Z'),
+    });
+    vi.mocked(repo.listMemories).mockResolvedValue([first, second]);
+
+    const result = await listMemories(mockPrisma, tenantAuth(), { limit: 1 });
+    expect(result.items).toHaveLength(1);
+    expect(result.nextCursor).toBeTruthy();
+    expect(repo.listMemories.mock.calls[0][1].limit).toBe(2);
+  });
+
+  it('applies explicit in-scope PROJECT filter for project credentials', async () => {
+    vi.mocked(repo.listMemories).mockResolvedValue([makeMemory()]);
+    await listMemories(mockPrisma, projectAuth(), {
+      scopeType: 'PROJECT',
+      workspaceId: WORKSPACE_ID,
+      projectId: PROJECT_ID,
+      updatedAfter: '2026-01-01T00:00:00.000Z',
+      updatedBefore: '2026-12-31T00:00:00.000Z',
+    });
+    expect(repo.listMemories).toHaveBeenCalledWith(
+      mockPrisma,
+      expect.objectContaining({
+        scopeType: 'PROJECT',
+        workspaceId: WORKSPACE_ID,
+        projectId: PROJECT_ID,
+        updatedAfter: expect.any(Date),
+        updatedBefore: expect.any(Date),
+      }),
+      null,
+    );
+  });
+});
+
+describe('correctMemory rejection paths', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('rejects correction when memory is missing', async () => {
+    vi.mocked(repo.getMemory).mockResolvedValue(null);
+    await expect(
+      correctMemory(mockPrisma, tenantAuth(['memory:correct']), MEMORY_ID, {
+        content: 'Anything',
+        reason: 'fix',
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.MEMORY_NOT_FOUND, statusCode: 404 });
+  });
+
+  it('rejects correction of deleted memory', async () => {
+    vi.mocked(repo.getMemory).mockResolvedValue(makeMemory({ status: 'DELETED' }));
+    await expect(
+      correctMemory(mockPrisma, tenantAuth(['memory:correct']), MEMORY_ID, {
+        content: 'Anything',
+        reason: 'fix',
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.MEMORY_DELETED, statusCode: 400 });
+  });
+
+  it('rejects unchanged correction content', async () => {
+    vi.mocked(repo.getMemory).mockResolvedValue(makeMemory({ content: 'Same body.' }));
+    // Content hash is computed from normalized content; force match via identical content + hash
+    const { hashContent, normalizeContent } = await import('../src/content.js');
+    const content = 'Unchanged correction body.';
+    const contentHash = hashContent(normalizeContent(content));
+    vi.mocked(repo.getMemory).mockResolvedValue(makeMemory({ content, contentHash }));
+
+    await expect(
+      correctMemory(mockPrisma, tenantAuth(['memory:correct']), MEMORY_ID, {
+        content,
+        reason: 'No-op',
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.MEMORY_UNCHANGED, statusCode: 400 });
+  });
+
+  it('clears validUntil when explicitly set to null', async () => {
+    vi.mocked(repo.getMemory).mockResolvedValue(makeMemory());
+    vi.mocked(repo.getMaxRevisionNumber).mockResolvedValue(1);
+    vi.mocked(repo.updateMemory).mockResolvedValue(makeMemory({ content: 'New body.' }));
+    vi.mocked(repo.insertRevision).mockResolvedValue({
+      id: 'rev-2',
+      tenantId: TENANT_ID,
+      memoryId: MEMORY_ID,
+      revisionNumber: 2,
+      content: 'New body.',
+      contentHash: '1'.repeat(64),
+      reason: 'Clear expiry',
+      createdByActorId: ACTOR_ID,
+      createdAt: new Date(),
+    });
+
+    await correctMemory(mockPrisma, tenantAuth(['memory:correct']), MEMORY_ID, {
+      content: 'New body.',
+      reason: 'Clear expiry',
+      validUntil: null,
+    });
+
+    expect(repo.updateMemory).toHaveBeenCalledWith(
+      mockTx,
+      TENANT_ID,
+      MEMORY_ID,
+      expect.objectContaining({ validUntil: null }),
+    );
+  });
+});
+
+describe('getRevisionHistory and upsertEmbedding failures', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns not found for missing memory history', async () => {
+    vi.mocked(repo.getMemory).mockResolvedValue(null);
+    await expect(getRevisionHistory(mockPrisma, tenantAuth(), MEMORY_ID)).rejects.toMatchObject({
+      code: ERROR_CODES.MEMORY_NOT_FOUND,
+      statusCode: 404,
+    });
+  });
+
+  it('rejects embedding upsert when memory is missing', async () => {
+    vi.mocked(repo.getMemory).mockResolvedValue(null);
+    await expect(
+      upsertEmbedding(mockPrisma, tenantAuth(['memory:embed']), MEMORY_ID, {
+        embedding: validEmbedding(),
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.MEMORY_NOT_FOUND });
+  });
+
+  it('rejects embedding upsert when memory is deleted', async () => {
+    vi.mocked(repo.getMemory).mockResolvedValue(makeMemory({ status: 'DELETED' }));
+    await expect(
+      upsertEmbedding(mockPrisma, tenantAuth(['memory:embed']), MEMORY_ID, {
+        embedding: validEmbedding(),
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.MEMORY_DELETED });
+  });
+});
+
+describe('searchMemories vector path', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('routes queryEmbedding through searchByVector and exposes similarity', async () => {
+    vi.mocked(repo.searchByVector).mockResolvedValue([
+      {
+        id: MEMORY_ID,
+        tenant_id: TENANT_ID,
+        workspace_id: null,
+        project_id: null,
+        actor_id: ACTOR_ID,
+        source_artifact_id: null,
+        scope_type: 'TENANT',
+        scope_id: TENANT_ID,
+        memory_type: 'FACT',
+        status: 'ACTIVE',
+        content: 'Vector hit',
+        content_hash: '2'.repeat(64),
+        importance: 0.5,
+        confidence: 1,
+        sensitivity: 'STANDARD',
+        valid_from: new Date('2026-07-24T12:00:00.000Z'),
+        valid_until: null,
+        superseded_by_id: null,
+        metadata: {},
+        created_at: new Date('2026-07-24T12:00:00.000Z'),
+        updated_at: new Date('2026-07-24T12:00:00.000Z'),
+        deleted_at: null,
+        revision_number: 1,
+        cosine_distance: 0.1,
+      },
+    ]);
+
+    const results = await searchMemories(mockPrisma, tenantAuth(), {
+      scopeType: 'TENANT',
+      queryEmbedding: validEmbedding(),
+      queryText: 'Vector',
+      minimumScore: 0.2,
+    });
+
+    expect(repo.searchByVector).toHaveBeenCalled();
+    expect(repo.searchByText).not.toHaveBeenCalled();
+    expect(results[0].explanation.components.vectorSimilarity).toBeGreaterThan(0);
+    expect(results[0].explanation.finalScore).toBeGreaterThan(0);
+  });
+
+  it('sorts equal scores with updatedAt then id tie-breakers', async () => {
+    const base = {
+      tenant_id: TENANT_ID,
+      workspace_id: null,
+      project_id: null,
+      actor_id: ACTOR_ID,
+      source_artifact_id: null,
+      scope_type: 'TENANT' as const,
+      scope_id: TENANT_ID,
+      memory_type: 'FACT',
+      status: 'ACTIVE',
+      content: 'same keywords deployment',
+      content_hash: '3'.repeat(64),
+      importance: 0.5,
+      confidence: 1,
+      sensitivity: 'STANDARD',
+      valid_from: new Date('2026-07-01T00:00:00.000Z'),
+      valid_until: null,
+      superseded_by_id: null,
+      metadata: {},
+      created_at: new Date('2026-07-01T00:00:00.000Z'),
+      deleted_at: null,
+      revision_number: 1,
+      cosine_distance: null,
+    };
+    const older = {
+      ...base,
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      updated_at: new Date('2026-07-01T00:00:00.000Z'),
+    };
+    const newer = {
+      ...base,
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      updated_at: new Date('2026-07-10T00:00:00.000Z'),
+    };
+    vi.mocked(repo.searchByText).mockResolvedValue([older, newer]);
+
+    const results = await searchMemories(mockPrisma, tenantAuth(), {
+      scopeType: 'TENANT',
+      queryText: 'deployment',
+    });
+    expect(results[0].memory.id).toBe(newer.id);
+  });
+});

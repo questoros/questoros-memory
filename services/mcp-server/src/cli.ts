@@ -1,10 +1,20 @@
+import { existsSync } from 'node:fs';
 import { config } from 'dotenv';
 import path from 'path';
 import { startMcpServer } from './server.js';
 
+function resolveEnvPath(): string {
+  const cwdEnv = path.resolve(process.cwd(), '.env');
+  // pnpm --filter runs package scripts with the package directory as cwd.
+  const monorepoRootEnv = path.resolve(process.cwd(), '../../.env');
+  if (existsSync(cwdEnv)) return cwdEnv;
+  if (existsSync(monorepoRootEnv)) return monorepoRootEnv;
+  return cwdEnv;
+}
+
 async function main() {
-  // Load .env from CWD (expected to be repo root when run via pnpm)
-  config({ path: path.resolve(process.cwd(), '.env') });
+  // Load ignored root .env (or package-local .env when present). No secrets in MCP JSON.
+  config({ path: resolveEnvPath() });
 
   const apiKey = process.env.QUESTOROS_MEMORY_API_KEY;
   if (!apiKey) {
