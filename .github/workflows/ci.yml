@@ -7,6 +7,9 @@ on:
       - main
       - 'feat/**'
 
+permissions:
+  contents: write
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -14,6 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -51,44 +56,38 @@ jobs:
             services/memory-api/src/lambda.ts \
             services/memory-api/tests/lambda.test.ts
 
-      - name: Upload canonical formatted files
-        uses: actions/upload-artifact@v6
-        with:
-          name: phase6-formatted-files
-          path: |
-            .github/workflows/ci.yml
-            .github/workflows/phase6-format.yml
-            .gitignore
-            infra/aws-cdk/README.md
-            infra/aws-cdk/package.json
-            infra/aws-cdk/src/app.ts
-            infra/aws-cdk/scripts/copy-prisma-runtime.mjs
-            infra/aws-cdk/scripts/prepare-prisma-runtime.mjs
-            infra/aws-cdk/scripts/synth.mjs
-            infra/aws-cdk/scripts/verify-assembly.mjs
-            services/memory-api/src/index.ts
-            services/memory-api/src/lambda.ts
-            services/memory-api/tests/lambda.test.ts
+      - name: Commit canonical formatting
+        if: github.event.pull_request.head.ref == 'feat/phase-6-aws-memory-api-runtime' || github.ref_name == 'feat/phase-6-aws-memory-api-runtime'
+        run: |
+          git config user.name "questoros-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/workflows/ci.yml .github/workflows/phase6-format.yml infra/aws-cdk services/memory-api/src services/memory-api/tests/lambda.test.ts
+          if git diff --cached --quiet; then
+            echo "No formatting changes required."
+          else
+            git commit -m "style(phase6): format AWS runtime changes"
+            git push origin HEAD:feat/phase-6-aws-memory-api-runtime
+          fi
 
       - name: Run validation diagnostics
         shell: bash
         run: |
-          mkdir -p .diagnostics
+          mkdir -p diagnostics
           set +e
-          pnpm lint > .diagnostics/lint.log 2>&1
-          echo $? > .diagnostics/lint.exit
-          pnpm typecheck > .diagnostics/typecheck.log 2>&1
-          echo $? > .diagnostics/typecheck.exit
-          pnpm test > .diagnostics/test.log 2>&1
-          echo $? > .diagnostics/test.exit
-          pnpm build > .diagnostics/build.log 2>&1
-          echo $? > .diagnostics/build.exit
-          pnpm --filter @questoros-memory/aws-cdk synth > .diagnostics/synth.log 2>&1
-          echo $? > .diagnostics/synth.exit
+          pnpm lint > diagnostics/lint.log 2>&1
+          echo $? > diagnostics/lint.exit
+          pnpm typecheck > diagnostics/typecheck.log 2>&1
+          echo $? > diagnostics/typecheck.exit
+          pnpm test > diagnostics/test.log 2>&1
+          echo $? > diagnostics/test.exit
+          pnpm build > diagnostics/build.log 2>&1
+          echo $? > diagnostics/build.exit
+          pnpm --filter @questoros-memory/aws-cdk synth > diagnostics/synth.log 2>&1
+          echo $? > diagnostics/synth.exit
           set -e
 
       - name: Upload validation diagnostics
         uses: actions/upload-artifact@v6
         with:
           name: phase6-validation-diagnostics
-          path: .diagnostics
+          path: diagnostics
