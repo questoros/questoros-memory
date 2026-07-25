@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   CreateDocumentInput,
   CreateFolderInput,
@@ -9,7 +10,7 @@ import type {
   UpdateDocumentInput,
 } from '@questoros-memory/publisher-core';
 import { assertShareLinkAllowed } from '@questoros-memory/publisher-core';
-import type { GoogleDriveHttpClient } from './http-client.js';
+import type { MicrosoftGraphHttpClient } from './http-client.js';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -19,23 +20,49 @@ function newId(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function hashContent(content: string): string {
+  return createHash('sha256').update(content, 'utf8').digest('hex');
+}
+
+export type MicrosoftGraphTarget = 'onedrive' | 'sharepoint';
+
+export interface FakeMicrosoftGraphClientOptions {
+  target?: MicrosoftGraphTarget;
+  driveId?: string;
+  siteId?: string | null;
+}
+
 /**
- * In-memory fake Google client for unit tests.
+ * In-memory fake Microsoft Graph client for OneDrive and SharePoint unit tests.
+ * Never performs network I/O or stores OAuth tokens.
  */
-export class FakeGoogleClient implements GoogleDriveHttpClient {
+export class FakeMicrosoftGraphClient implements MicrosoftGraphHttpClient {
   private readonly folders = new Map<string, DriveFolder>();
   private readonly documents = new Map<string, DriveDocument>();
   private readonly changes: DriveChange[] = [];
-  readonly driveId = 'google-drive-default';
+  readonly target: MicrosoftGraphTarget;
+  readonly driveId: string;
+  readonly siteId: string | null;
+
+  constructor(options: FakeMicrosoftGraphClientOptions = {}) {
+    this.target = options.target ?? 'onedrive';
+    this.driveId = options.driveId ?? 'ms-drive-default';
+    this.siteId =
+      options.siteId !== undefined
+        ? options.siteId
+        : this.target === 'sharepoint'
+          ? 'ms-site-default'
+          : null;
+  }
 
   async createFolder(input: CreateFolderInput): Promise<DriveFolder> {
     await Promise.resolve();
     const folder: DriveFolder = {
-      id: newId('gfolder'),
+      id: newId('msfolder'),
       name: input.name,
       parentFolderId: input.parentFolderId ?? null,
       driveId: input.driveId ?? this.driveId,
-      siteId: null,
+      siteId: input.siteId ?? this.siteId,
     };
     this.folders.set(folder.id, folder);
     return folder;
@@ -56,24 +83,30 @@ export class FakeGoogleClient implements GoogleDriveHttpClient {
 
   async createDocument(input: CreateDocumentInput): Promise<DriveDocument> {
     await Promise.resolve();
+    const driveId = input.driveId ?? this.driveId;
+    const siteId = input.siteId ?? this.siteId;
+    const host =
+      this.target === 'sharepoint'
+        ? `https://contoso.sharepoint.com/sites/demo/_layouts/15/Doc.aspx?sourcedoc=${encodeURIComponent(input.name)}`
+        : `https://graph.microsoft.com/v1.0/me/drive/items/fake/${encodeURIComponent(input.name)}`;
     const doc: DriveDocument = {
-      id: newId('gdoc'),
+      id: newId('msdoc'),
       name: input.name,
       parentFolderId: input.parentFolderId ?? null,
       content: input.content,
       mimeType: input.mimeType ?? 'text/markdown',
       modifiedAt: nowIso(),
-      webViewLink: `https://drive.google.com/file/d/fake/${input.name}`,
-      driveId: input.driveId ?? this.driveId,
-      siteId: null,
+      webViewLink: host,
+      driveId,
+      siteId,
     };
     this.documents.set(doc.id, doc);
     this.changes.push({
       fileId: doc.id,
       removed: false,
       modifiedAt: doc.modifiedAt,
-      driveId: doc.driveId,
-      siteId: null,
+      driveId,
+      siteId,
     });
     return doc;
   }
@@ -82,21 +115,23 @@ export class FakeGoogleClient implements GoogleDriveHttpClient {
     await Promise.resolve();
     const existing = this.documents.get(input.fileId);
     if (!existing) {
-      throw new Error(`FakeGoogleClient: document not found: ${input.fileId}`);
+      throw new Error(`FakeMicrosoftGraphClient: document not found: ${input.fileId}`);
     }
     const updated: DriveDocument = {
       ...existing,
       content: input.content,
       name: input.name ?? existing.name,
       modifiedAt: nowIso(),
+      driveId: input.driveId ?? existing.driveId ?? this.driveId,
+      siteId: input.siteId ?? existing.siteId ?? this.siteId,
     };
     this.documents.set(updated.id, updated);
     this.changes.push({
       fileId: updated.id,
       removed: false,
       modifiedAt: updated.modifiedAt,
-      driveId: updated.driveId ?? this.driveId,
-      siteId: null,
+      driveId: updated.driveId,
+      siteId: updated.siteId,
     });
     return updated;
   }
@@ -105,7 +140,7 @@ export class FakeGoogleClient implements GoogleDriveHttpClient {
     await Promise.resolve();
     const doc = this.documents.get(fileId);
     if (!doc) {
-      throw new Error(`FakeGoogleClient: document not found: ${fileId}`);
+      throw new Error(`FakeMicrosoftGraphClient: document not found: ${fileId}`);
     }
     return { ...doc };
   }
@@ -116,6 +151,7 @@ export class FakeGoogleClient implements GoogleDriveHttpClient {
   }> {
     await Promise.resolve();
     void pageToken;
+    // Simulates Graph delta/change tracking without network.
     return { changes: [...this.changes], nextPageToken: null };
   }
 
@@ -130,9 +166,9 @@ export class FakeGoogleClient implements GoogleDriveHttpClient {
         parentFolderId: doc.parentFolderId,
         modifiedAt: doc.modifiedAt,
         webViewLink: doc.webViewLink ?? null,
-        md5Checksum: null,
+        md5Checksum: hashContent(doc.content).slice(0, 32),
         driveId: doc.driveId ?? this.driveId,
-        siteId: null,
+        siteId: doc.siteId ?? this.siteId,
       };
     }
     const folder = this.folders.get(fileId);
@@ -140,23 +176,23 @@ export class FakeGoogleClient implements GoogleDriveHttpClient {
       return {
         id: folder.id,
         name: folder.name,
-        mimeType: 'application/vnd.google-apps.folder',
+        mimeType: 'application/vnd.microsoft.graph.folder',
         parentFolderId: folder.parentFolderId,
         modifiedAt: nowIso(),
         webViewLink: null,
         md5Checksum: null,
         driveId: folder.driveId ?? this.driveId,
-        siteId: null,
+        siteId: folder.siteId ?? this.siteId,
       };
     }
-    throw new Error(`FakeGoogleClient: metadata not found: ${fileId}`);
+    throw new Error(`FakeMicrosoftGraphClient: metadata not found: ${fileId}`);
   }
 
   async createShareLink(fileId: string, options?: ShareLinkOptions): Promise<string> {
     await Promise.resolve();
     const safe = assertShareLinkAllowed(options);
-    const scope = safe.type === 'anyone' ? 'anyone' : 'domain';
-    return `https://drive.google.com/file/d/${fileId}/view?usp=sharing&scope=${scope}`;
+    const scope = safe.type === 'anyone' ? 'anonymous' : 'organization';
+    return `https://graph.microsoft.com/v1.0/shares/fake/${fileId}?scope=${scope}`;
   }
 
   /** Test helper: inspect stored documents. */

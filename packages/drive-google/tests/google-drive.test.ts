@@ -37,9 +37,15 @@ describe('GoogleDriveProvider', () => {
 
     const link = await provider.createShareLink(doc.id);
     expect(link).toContain(doc.id);
+    expect(link).toContain('scope=domain');
+
+    await expect(provider.createShareLink(doc.id, { type: 'anyone' })).rejects.toThrow(
+      /Public share links are disabled/,
+    );
 
     const changes = await provider.listChanges();
     expect(changes.changes.length).toBeGreaterThan(0);
     expect(client.getStoredDocuments().has(doc.id)).toBe(true);
+    expect(doc.driveId).toBe('google-drive-default');
   });
 });
