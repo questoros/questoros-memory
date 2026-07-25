@@ -16,6 +16,7 @@ vi.mock('@questoros-memory/memory-service', () => ({
   transportDeleteMemory: vi.fn(),
   transportRevisionHistory: vi.fn(),
   transportUpsertEmbedding: vi.fn(),
+  transportGenerateEmbedding: vi.fn(),
   transportReadyz: vi.fn().mockResolvedValue(true),
 }));
 
