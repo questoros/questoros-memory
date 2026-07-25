@@ -125,6 +125,7 @@ export async function generateEmbeddingForMemory(
   }
 
   const provider = options.provider ?? createEmbeddingProvider({ config });
+  const originalContentHash = memory.contentHash;
 
   let result;
   try {
@@ -158,52 +159,88 @@ export async function generateEmbeddingForMemory(
     throw mapEmbeddingProviderError(error);
   }
 
-  await withTransaction(
-    prisma,
-    async (tx) => {
-      const current = await repo.getMemory(tx, auth.tenantId, memoryId);
-      if (!current || current.status === 'DELETED') {
-        throw new ServiceError(
-          ERROR_CODES.MEMORY_DELETED,
-          'Cannot generate embedding for a deleted memory.',
-          400,
-        );
+  try {
+    await withTransaction(
+      prisma,
+      async (tx) => {
+        const current = await repo.getMemory(tx, auth.tenantId, memoryId);
+        if (!current || current.status === 'DELETED') {
+          throw new ServiceError(
+            ERROR_CODES.MEMORY_DELETED,
+            'Cannot generate embedding for a deleted memory.',
+            400,
+          );
+        }
+
+        if (current.contentHash !== originalContentHash) {
+          throw new ServiceError(
+            ERROR_CODES.CONFLICT,
+            'Memory content changed during embedding generation.',
+            409,
+          );
+        }
+
+        await repo.upsertEmbedding(tx, {
+          tenantId: auth.tenantId,
+          memoryId,
+          scopeType: current.scopeType,
+          scopeId: current.scopeId,
+          embeddingModel: result.modelId,
+          embeddingDimensions: result.dimensions,
+          embedding: [...result.embedding],
+        });
+
+        await repo.insertAuditEvent(tx, {
+          tenantId: auth.tenantId,
+          workspaceId: current.workspaceId,
+          projectId: current.projectId,
+          actorId: auth.actorId,
+          memoryId,
+          action: 'EMBED',
+          outcome: 'SUCCESS',
+          requestId: options.requestId ?? null,
+          reason: null,
+          metadata: {
+            provider: result.provider,
+            modelId: result.modelId,
+            dimensions: result.dimensions,
+            normalized: result.normalized,
+            inputTokenCount: result.inputTokenCount,
+            reused: false,
+            generated: true,
+            force: input.force,
+          },
+        });
+      },
+      'generateEmbeddingForMemory',
+    );
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === ERROR_CODES.CONFLICT) {
+      try {
+        await repo.insertAuditEvent(prisma, {
+          tenantId: auth.tenantId,
+          workspaceId: memory.workspaceId,
+          projectId: memory.projectId,
+          actorId: auth.actorId,
+          memoryId,
+          action: 'EMBED',
+          outcome: 'FAILURE',
+          requestId: options.requestId ?? null,
+          reason: null,
+          metadata: {
+            provider: config.provider,
+            modelId: config.modelId,
+            dimensions: config.dimensions,
+            conflict: 'content_hash_changed',
+            force: input.force,
+          },
+        });
+      } catch {
+        // Audit failure must not mask the conflict.
       }
-
-      await repo.upsertEmbedding(tx, {
-        tenantId: auth.tenantId,
-        memoryId,
-        scopeType: current.scopeType,
-        scopeId: current.scopeId,
-        embeddingModel: result.modelId,
-        embeddingDimensions: result.dimensions,
-        embedding: [...result.embedding],
-      });
-
-      await repo.insertAuditEvent(tx, {
-        tenantId: auth.tenantId,
-        workspaceId: current.workspaceId,
-        projectId: current.projectId,
-        actorId: auth.actorId,
-        memoryId,
-        action: 'EMBED',
-        outcome: 'SUCCESS',
-        requestId: options.requestId ?? null,
-        reason: null,
-        metadata: {
-          provider: result.provider,
-          modelId: result.modelId,
-          dimensions: result.dimensions,
-          normalized: result.normalized,
-          inputTokenCount: result.inputTokenCount,
-          reused: false,
-          generated: true,
-          force: input.force,
-        },
-      });
-    },
-    'generateEmbeddingForMemory',
-  );
+    }
+    throw error;
+  }
 
   return {
     memoryId,

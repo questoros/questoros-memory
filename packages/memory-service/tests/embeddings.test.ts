@@ -167,6 +167,37 @@ describe('generateEmbeddingForMemory', () => {
       expect.objectContaining({ outcome: 'FAILURE' }),
     );
   });
+
+  it('rejects stale embedding when content changes during provider invocation', async () => {
+    const originalHash = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const changedHash = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    vi.mocked(repo.getMemory)
+      .mockResolvedValueOnce(makeMemory({ contentHash: originalHash }))
+      .mockResolvedValueOnce(
+        makeMemory({ contentHash: changedHash, content: 'Corrected content.' }),
+      );
+
+    const calls: unknown[] = [];
+    await expect(
+      generateEmbeddingForMemory(mockPrisma, tenantAuth(), MEMORY_ID, {
+        provider: fakeProvider(calls),
+      }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.CONFLICT,
+      statusCode: 409,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(repo.upsertEmbedding).not.toHaveBeenCalled();
+    expect(repo.insertAuditEvent).toHaveBeenCalledWith(
+      mockPrisma,
+      expect.objectContaining({
+        outcome: 'FAILURE',
+        metadata: expect.objectContaining({ conflict: 'content_hash_changed' }),
+      }),
+    );
+    expect(JSON.stringify(calls)).not.toContain('0.02');
+  });
 });
 
 describe('maybeAutoGenerateEmbedding', () => {

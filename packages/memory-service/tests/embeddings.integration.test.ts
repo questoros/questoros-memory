@@ -6,6 +6,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { PrismaClient } from '@prisma/client';
 import type { AuthContext } from '@questoros-memory/memory-core';
 import {
   getDatabaseClient,
@@ -43,11 +44,16 @@ function fakeProvider(): EmbeddingProvider {
 }
 
 describe.skipIf(!enabled)('embedding lifecycle integration (fake provider)', () => {
-  const prisma = getDatabaseClient();
+  let prisma: PrismaClient;
   let auth: AuthContext;
   let memoryId = '';
 
-  beforeAll(async () => {
+  beforeAll(() => {
+    if (!process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL is required for embedding integration tests');
+    }
+    prisma = getDatabaseClient();
+
     // Uses whatever bootstrap tenant/actor already exists for local Phase 3 testing.
     // Falls back to env-provided IDs when present.
     const tenantId = process.env.QUESTOROS_TEST_TENANT_ID;
@@ -82,7 +88,9 @@ describe.skipIf(!enabled)('embedding lifecycle integration (fake provider)', () 
         // best-effort cleanup
       }
     }
-    await disconnectDatabaseClient();
+    if (enabled) {
+      await disconnectDatabaseClient();
+    }
   });
 
   it('generates, searches, invalidates on correct, regenerates, and cleans up without AWS', async () => {
