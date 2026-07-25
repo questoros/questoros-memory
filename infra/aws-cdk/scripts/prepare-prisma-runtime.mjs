@@ -28,17 +28,13 @@ fs.mkdirSync(generatedDir, { recursive: true });
 fs.writeFileSync(generatedSchemaPath, lambdaSchema, 'utf8');
 
 const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-const result = spawnSync(
-  command,
-  ['exec', 'prisma', 'generate', '--schema', generatedSchemaPath],
-  {
-    cwd: databaseRoot,
-    env: process.env,
-    encoding: 'utf8',
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-  },
-);
+const result = spawnSync(command, ['exec', 'prisma', 'generate', '--schema', generatedSchemaPath], {
+  cwd: databaseRoot,
+  env: process.env,
+  encoding: 'utf8',
+  stdio: 'inherit',
+  shell: process.platform === 'win32',
+});
 
 if (result.error || result.signal || result.status !== 0) {
   console.error('Lambda Prisma generation failed.');
