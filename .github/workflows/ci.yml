@@ -57,6 +57,7 @@ jobs:
             services/memory-api/tests/lambda.test.ts
 
       - name: Commit canonical formatting
+        continue-on-error: true
         if: github.event.pull_request.head.ref == 'feat/phase-6-aws-memory-api-runtime' || github.ref_name == 'feat/phase-6-aws-memory-api-runtime'
         run: |
           git config user.name "questoros-ci"
