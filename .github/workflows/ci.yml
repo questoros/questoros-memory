@@ -49,3 +49,6 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Synthesize and verify AWS staging package
+        run: pnpm --filter @questoros-memory/aws-cdk synth
