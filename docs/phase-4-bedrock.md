@@ -32,7 +32,7 @@ EMBEDDING_TIMEOUT_MS=10000
 EMBEDDING_MAX_ATTEMPTS=3
 ```
 
-Application deployment region (future): `ap-southeast-1`.  
+Application deployment region (future): `ap-southeast-1`.
 Bedrock invocation region for Phase 4: `us-west-2`.
 
 Titan Text Embeddings V2 supports in-region invocation in multiple AWS Regions, including at least `us-east-1`, `us-east-2`, and `us-west-2`. Phase 4 keeps `AWS_BEDROCK_REGION=us-west-2` as the selected runtime region; this is an implementation choice, not a claim that only two Regions exist. The model is not used from `ap-southeast-1` in this phase.
@@ -54,7 +54,7 @@ No Phase 4 migration. Existing `memory_embeddings` unique key `(tenant_id, memor
 
 ## Testing
 
-Unit/provider/service/REST/MCP tests never call AWS.  
+Unit/provider/service/REST/MCP tests never call AWS.
 Opt-in fake-provider CockroachDB test:
 
 ```powershell
