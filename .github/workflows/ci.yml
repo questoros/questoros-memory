@@ -40,7 +40,6 @@ jobs:
           pnpm exec prettier --write \
             .github/workflows/ci.yml \
             .github/workflows/phase6-format.yml \
-            .gitignore \
             infra/aws-cdk/README.md \
             infra/aws-cdk/package.json \
             infra/aws-cdk/src/app.ts \
