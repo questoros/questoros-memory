@@ -32,19 +32,20 @@ The CockroachDB Cloud Managed MCP server remains a separate, read-only administr
 
 ## Tool catalog
 
-Exactly nine tools are registered:
+Exactly ten tools are registered:
 
-| Tool name                        | Mutates data | Description                        |
-| -------------------------------- | ------------ | ---------------------------------- |
-| `questoros_memory_whoami`        | No           | Identity and permissions           |
-| `questoros_memory_create`        | Yes          | Create memory with ICARE³ metadata |
-| `questoros_memory_get`           | No           | Get memory by ID                   |
-| `questoros_memory_list`          | No           | List with lifecycle filters        |
-| `questoros_memory_search`        | No           | Explainable search                 |
-| `questoros_memory_correct`       | Yes          | Correct with revision history      |
-| `questoros_memory_delete`        | Yes          | Soft delete                        |
-| `questoros_memory_history`       | No           | Revision history                   |
-| `questoros_memory_set_embedding` | Yes          | Upsert 1024-d embedding            |
+| Tool name                             | Mutates data | Description                                 |
+| ------------------------------------- | ------------ | ------------------------------------------- |
+| `questoros_memory_whoami`             | No           | Identity and permissions                    |
+| `questoros_memory_create`             | Yes          | Create memory with ICARE³ metadata          |
+| `questoros_memory_get`                | No           | Get memory by ID                            |
+| `questoros_memory_list`               | No           | List with lifecycle filters                 |
+| `questoros_memory_search`             | No           | Explainable search                          |
+| `questoros_memory_correct`            | Yes          | Correct with revision history               |
+| `questoros_memory_delete`             | Yes          | Soft delete                                 |
+| `questoros_memory_history`            | No           | Revision history                            |
+| `questoros_memory_set_embedding`      | Yes          | Upsert caller-supplied 1024-d embedding     |
+| `questoros_memory_generate_embedding` | Yes          | Generate Titan V2 embedding (metadata only) |
 
 Tool names are exported as `MCP_TOOL_NAMES` from `services/mcp-server/src/tools.ts`.
 

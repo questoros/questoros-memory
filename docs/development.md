@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 3 — Memory API, MCP server, shared Zod/ICARE³ contracts, and hardening tests (mocked repository boundary).
+Phase 4 — Bedrock Titan Text Embeddings V2 provider, server-generated embedding operation, REST/MCP generate surfaces, and AWS CDK staging preparation (not deployed).
 
 ## Local setup
 
