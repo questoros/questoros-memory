@@ -14,6 +14,10 @@ export default defineConfig({
         __dirname,
         'packages/embedding-provider/src/index.ts',
       ),
+      '@questoros-memory/reasoning-provider': path.resolve(
+        __dirname,
+        'packages/reasoning-provider/src/index.ts',
+      ),
       '@questoros-memory/shared': path.resolve(__dirname, 'packages/shared/src/index.ts'),
       '@questoros-memory/harvester-core': path.resolve(
         __dirname,
