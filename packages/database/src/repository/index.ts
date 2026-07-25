@@ -11,6 +11,7 @@ export {
   updateMemory,
   softDeleteMemory,
   getRevisions,
+  getRevision,
   getMaxRevisionNumber,
   upsertEmbedding,
   hasEmbedding,
@@ -38,3 +39,22 @@ export type {
   MemoryWithRevision,
   SearchMemoryRow,
 } from './memory.js';
+
+export {
+  hashContent,
+  insertHarvestRun,
+  updateHarvestRun,
+  getHarvestRun,
+  insertMemoryCandidate,
+  getMemoryCandidate,
+  listMemoryCandidates,
+  updateMemoryCandidate,
+  claimMemoryCandidateForReview,
+  rejectMemoryCandidatesForHarvestRun,
+  insertPublishedArtifact,
+  getPublishedArtifact,
+  updatePublishedArtifact,
+  updatePublishedArtifactIfMatch,
+  insertSourceArtifact,
+} from './harvest.js';
+export type { HarvestRunRow, MemoryCandidateRow, PublishedArtifactRow } from './harvest.js';

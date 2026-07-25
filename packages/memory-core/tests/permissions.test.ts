@@ -8,13 +8,16 @@ import {
 } from '../src/permissions.js';
 
 describe('API_PERMISSIONS', () => {
-  it('contains exactly six permissions', () => {
+  it('contains Phase 5 harvest/review/publish permissions', () => {
     expect(API_PERMISSIONS).toEqual([
       'memory:read',
       'memory:write',
       'memory:correct',
       'memory:delete',
       'memory:embed',
+      'memory:harvest',
+      'memory:review',
+      'memory:publish',
       'memory:admin',
     ]);
   });

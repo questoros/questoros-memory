@@ -10,6 +10,14 @@ import {
   historyMemoryToolShape,
   setEmbeddingToolShape,
   generateEmbeddingToolShape,
+  harvestRunToolShape,
+  listCandidatesToolShape,
+  getCandidateToolShape,
+  approveCandidateToolShape,
+  rejectCandidateToolShape,
+  contextPackageToolShape,
+  publishArtifactToolShape,
+  syncArtifactToolShape,
 } from '@questoros-memory/memory-core';
 import {
   transportWhoami,
@@ -22,6 +30,14 @@ import {
   transportRevisionHistory,
   transportUpsertEmbedding,
   transportGenerateEmbedding,
+  transportCreateHarvestRun,
+  transportListCandidates,
+  transportGetCandidate,
+  transportApproveCandidate,
+  transportRejectCandidate,
+  transportCreateContextPackage,
+  transportPublishArtifact,
+  transportSyncPublishedArtifact,
 } from '@questoros-memory/memory-service';
 
 function formatError(error: unknown): string {
@@ -218,6 +234,118 @@ export function registerTools(server: McpServer, apiKey: string): void {
       }
     },
   );
+
+  server.tool(
+    'questoros_memory_harvest_run',
+    'Runs deterministic harvest extraction against source text and creates reviewable candidates. Changes data.',
+    harvestRunToolShape,
+    async (input) => {
+      try {
+        return jsonResult(await transportCreateHarvestRun(apiKey, input));
+      } catch (error) {
+        return { content: [{ type: 'text', text: formatError(error) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'questoros_memory_list_candidates',
+    'Lists memory candidates awaiting review. Read-only within credential scope.',
+    listCandidatesToolShape,
+    async (input) => {
+      try {
+        return jsonResult(await transportListCandidates(apiKey, input));
+      } catch (error) {
+        return { content: [{ type: 'text', text: formatError(error) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'questoros_memory_get_candidate',
+    'Gets one memory candidate by id. Read-only within credential scope.',
+    getCandidateToolShape,
+    async (input) => {
+      try {
+        return jsonResult(await transportGetCandidate(apiKey, input.candidateId));
+      } catch (error) {
+        return { content: [{ type: 'text', text: formatError(error) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'questoros_memory_approve_candidate',
+    'Approves a candidate into authoritative memory (create or correct). Changes data.',
+    approveCandidateToolShape,
+    async (input) => {
+      try {
+        return jsonResult(
+          await transportApproveCandidate(apiKey, input.candidateId, {
+            reason: input.reason,
+          }),
+        );
+      } catch (error) {
+        return { content: [{ type: 'text', text: formatError(error) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'questoros_memory_reject_candidate',
+    'Rejects a candidate without writing authoritative memory. Changes data.',
+    rejectCandidateToolShape,
+    async (input) => {
+      try {
+        return jsonResult(
+          await transportRejectCandidate(apiKey, input.candidateId, {
+            reason: input.reason,
+          }),
+        );
+      } catch (error) {
+        return { content: [{ type: 'text', text: formatError(error) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'questoros_memory_context_package',
+    'Assembles a scoped organizational intelligence context package. Read-only.',
+    contextPackageToolShape,
+    async (input) => {
+      try {
+        return jsonResult(await transportCreateContextPackage(apiKey, input));
+      } catch (error) {
+        return { content: [{ type: 'text', text: formatError(error) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'questoros_memory_publish_artifact',
+    'Publishes an intelligence brief to the configured Drive provider (stub or Google). Changes data.',
+    publishArtifactToolShape,
+    async (input) => {
+      try {
+        return jsonResult(await transportPublishArtifact(apiKey, input));
+      } catch (error) {
+        return { content: [{ type: 'text', text: formatError(error) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'questoros_memory_sync_artifact',
+    'Detects external Drive edits and creates harvest candidates without silent overwrite. Changes data.',
+    syncArtifactToolShape,
+    async (input) => {
+      try {
+        return jsonResult(await transportSyncPublishedArtifact(apiKey, input.artifactId));
+      } catch (error) {
+        return { content: [{ type: 'text', text: formatError(error) }], isError: true };
+      }
+    },
+  );
 }
 
 export const MCP_TOOL_NAMES = [
@@ -231,4 +359,12 @@ export const MCP_TOOL_NAMES = [
   'questoros_memory_history',
   'questoros_memory_set_embedding',
   'questoros_memory_generate_embedding',
+  'questoros_memory_harvest_run',
+  'questoros_memory_list_candidates',
+  'questoros_memory_get_candidate',
+  'questoros_memory_approve_candidate',
+  'questoros_memory_reject_candidate',
+  'questoros_memory_context_package',
+  'questoros_memory_publish_artifact',
+  'questoros_memory_sync_artifact',
 ] as const;

@@ -1,0 +1,23 @@
+{
+  "name": "@questoros-memory/reasoning-provider",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Provider-neutral structured reasoning contracts for agentic harvest and tool selection",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@questoros-memory/memory-core": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.10"
+  }
+}

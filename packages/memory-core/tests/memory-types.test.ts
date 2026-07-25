@@ -7,6 +7,10 @@ import {
   ACTOR_TYPES,
   SOURCE_TYPES,
   AUDIT_OUTCOMES,
+  CANDIDATE_STATUSES,
+  HARVEST_RUN_STATUSES,
+  SYNC_DIRECTIONS,
+  SYNC_STATUSES,
 } from '../src/memory-types';
 
 describe('Scope types', () => {
@@ -16,7 +20,7 @@ describe('Scope types', () => {
 });
 
 describe('Memory types', () => {
-  it('has exactly eight memory types', () => {
+  it('includes Phase 5 organizational intelligence types', () => {
     expect(MEMORY_TYPES).toEqual([
       'PROFILE',
       'PREFERENCE',
@@ -26,6 +30,11 @@ describe('Memory types', () => {
       'EVENT',
       'SUMMARY',
       'INSTRUCTION',
+      'GOAL',
+      'CONSTRAINT',
+      'ACTION_RESULT',
+      'CHECKPOINT',
+      'ARTIFACT_SUMMARY',
     ]);
   });
 
@@ -38,19 +47,11 @@ describe('Memory statuses', () => {
   it('has exactly three statuses', () => {
     expect(MEMORY_STATUSES).toEqual(['ACTIVE', 'SUPERSEDED', 'DELETED']);
   });
-
-  it('contains no duplicates', () => {
-    expect(new Set(MEMORY_STATUSES).size).toBe(MEMORY_STATUSES.length);
-  });
 });
 
 describe('Sensitivity values', () => {
   it('has exactly four sensitivity levels', () => {
     expect(SENSITIVITY_VALUES).toEqual(['PUBLIC', 'STANDARD', 'SENSITIVE', 'RESTRICTED']);
-  });
-
-  it('contains no duplicates', () => {
-    expect(new Set(SENSITIVITY_VALUES).size).toBe(SENSITIVITY_VALUES.length);
   });
 });
 
@@ -58,14 +59,10 @@ describe('Actor types', () => {
   it('has exactly four actor types', () => {
     expect(ACTOR_TYPES).toEqual(['USER', 'AGENT', 'SERVICE', 'SYSTEM']);
   });
-
-  it('contains no duplicates', () => {
-    expect(new Set(ACTOR_TYPES).size).toBe(ACTOR_TYPES.length);
-  });
 });
 
 describe('Source types', () => {
-  it('has exactly seven source types', () => {
+  it('includes harvest and drive sources', () => {
     expect(SOURCE_TYPES).toEqual([
       'CONVERSATION',
       'DOCUMENT',
@@ -74,20 +71,31 @@ describe('Source types', () => {
       'API',
       'MANUAL',
       'SYSTEM',
+      'DRIVE',
+      'UPLOAD',
+      'HARVEST',
     ]);
   });
+});
 
-  it('contains no duplicates', () => {
-    expect(new Set(SOURCE_TYPES).size).toBe(SOURCE_TYPES.length);
+describe('Candidate and sync enums', () => {
+  it('defines candidate statuses', () => {
+    expect(CANDIDATE_STATUSES).toContain('PENDING');
+    expect(CANDIDATE_STATUSES).toContain('CONFLICT');
+  });
+
+  it('defines harvest run statuses', () => {
+    expect(HARVEST_RUN_STATUSES).toEqual(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED']);
+  });
+
+  it('defines sync directions and statuses', () => {
+    expect(SYNC_DIRECTIONS).toContain('BIDIRECTIONAL_REVIEWED');
+    expect(SYNC_STATUSES).toContain('SYNC_CONFLICT');
   });
 });
 
 describe('Audit outcomes', () => {
   it('has exactly three audit outcomes', () => {
     expect(AUDIT_OUTCOMES).toEqual(['SUCCESS', 'DENIED', 'FAILED']);
-  });
-
-  it('contains no duplicates', () => {
-    expect(new Set(AUDIT_OUTCOMES).size).toBe(AUDIT_OUTCOMES.length);
   });
 });

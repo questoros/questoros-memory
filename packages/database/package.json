@@ -16,6 +16,7 @@
     "db:bootstrap": "tsx scripts/bootstrap-database.ts",
     "db:migrate": "prisma migrate deploy --schema prisma/schema.prisma",
     "db:verify": "tsx scripts/verify-schema.ts",
+    "db:drift": "node scripts/assert-prisma-drift.mjs",
     "db:verify-vector": "tsx scripts/verify-vector-contract.ts",
     "auth:bootstrap-local": "tsx scripts/bootstrap-local-auth.ts"
   },

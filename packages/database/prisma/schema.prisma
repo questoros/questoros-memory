@@ -7,25 +7,32 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum crdb_internal_region {
+  aws_ap_southeast_1 @map("aws-ap-southeast-1")
+}
+
 /// Multi-tenant organization.
 model Tenant {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  slug      String   @unique @db.String
+  slug      String   @unique(map: "tenants_slug_unique") @db.String
   name      String   @db.String
   status    String   @default("ACTIVE") @db.String
   metadata  Json     @default("{}") @db.JsonB
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  workspaces        Workspace[]
-  projects          Project[]
-  actors            Actor[]
-  sourceArtifacts   SourceArtifact[]
-  memories          Memory[]
-  memoryRevisions   MemoryRevision[]
-  memoryAuditEvents MemoryAuditEvent[]
-  memoryEmbeddings  MemoryEmbedding[]
-  apiKeys           ApiKey[]
+  workspaces         Workspace[]
+  projects           Project[]
+  actors             Actor[]
+  sourceArtifacts    SourceArtifact[]
+  memories           Memory[]
+  memoryRevisions    MemoryRevision[]
+  memoryAuditEvents  MemoryAuditEvent[]
+  memoryEmbeddings   MemoryEmbedding[]
+  apiKeys            ApiKey[]
+  harvestRuns        HarvestRun[]
+  memoryCandidates   MemoryCandidate[]
+  publishedArtifacts PublishedArtifact[]
 
   @@map("tenants")
 }
@@ -41,16 +48,19 @@ model Workspace {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], map: "workspaces_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
 
-  projects          Project[]
-  memories          Memory[]
-  memoryAuditEvents MemoryAuditEvent[]
-  sourceArtifacts   SourceArtifact[]
-  apiKeys           ApiKey[]
+  projects           Project[]
+  memories           Memory[]
+  memoryAuditEvents  MemoryAuditEvent[]
+  sourceArtifacts    SourceArtifact[]
+  apiKeys            ApiKey[]
+  harvestRuns        HarvestRun[]
+  memoryCandidates   MemoryCandidate[]
+  publishedArtifacts PublishedArtifact[]
 
-  @@unique([tenantId, slug])
-  @@unique([tenantId, id])
+  @@unique([tenantId, slug], map: "workspaces_tenant_slug_unique")
+  @@unique([tenantId, id], map: "workspaces_tenant_id_unique")
   @@map("workspaces")
 }
 
@@ -66,17 +76,20 @@ model Project {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  tenant    Tenant    @relation(fields: [tenantId], references: [id])
-  workspace Workspace @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], map: "projects_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
+  workspace Workspace @relation(fields: [tenantId, workspaceId], references: [tenantId, id], map: "projects_tenant_workspace_fkey", onDelete: NoAction, onUpdate: NoAction)
 
-  sourceArtifacts   SourceArtifact[]
-  memories          Memory[]
-  memoryAuditEvents MemoryAuditEvent[]
-  apiKeys           ApiKey[]
+  sourceArtifacts    SourceArtifact[]
+  memories           Memory[]
+  memoryAuditEvents  MemoryAuditEvent[]
+  apiKeys            ApiKey[]
+  harvestRuns        HarvestRun[]
+  memoryCandidates   MemoryCandidate[]
+  publishedArtifacts PublishedArtifact[]
 
-  @@unique([tenantId, workspaceId, slug])
-  @@unique([tenantId, id])
-  @@unique([tenantId, workspaceId, id])
+  @@unique([tenantId, workspaceId, slug], map: "projects_tenant_workspace_slug_unique")
+  @@unique([tenantId, id], map: "projects_tenant_id_unique")
+  @@unique([tenantId, workspaceId, id], map: "projects_tenant_workspace_id_unique")
   @@map("projects")
 }
 
@@ -91,15 +104,17 @@ model Actor {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], map: "actors_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
 
-  memories          Memory[]
-  memoryRevisions   MemoryRevision[]
-  memoryAuditEvents MemoryAuditEvent[]
-  apiKeys           ApiKey[]
+  memories           Memory[]
+  memoryRevisions    MemoryRevision[]
+  memoryAuditEvents  MemoryAuditEvent[]
+  apiKeys            ApiKey[]
+  harvestRuns        HarvestRun[]
+  publishedArtifacts PublishedArtifact[]
 
-  @@unique([tenantId, externalId])
-  @@unique([tenantId, id])
+  @@unique([tenantId, externalId], map: "actors_tenant_external_id_unique")
+  @@unique([tenantId, id], map: "actors_tenant_id_unique")
   @@map("actors")
 }
 
@@ -116,13 +131,15 @@ model SourceArtifact {
   metadata       Json     @default("{}") @db.JsonB
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
-  project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], map: "source_artifacts_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
+  workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id], map: "source_artifacts_tenant_workspace_fkey", onDelete: NoAction, onUpdate: NoAction)
+  project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id], map: "source_artifacts_tenant_workspace_project_fkey", onDelete: NoAction, onUpdate: NoAction)
 
-  memories Memory[]
+  memories         Memory[]
+  harvestRuns      HarvestRun[]
+  memoryCandidates MemoryCandidate[]
 
-  @@unique([tenantId, id])
+  @@unique([tenantId, id], map: "source_artifacts_tenant_id_unique")
   @@map("source_artifacts")
 }
 
@@ -151,23 +168,24 @@ model Memory {
   updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
   deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id])
-  workspace      Workspace?      @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
-  project        Project?        @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
-  actor          Actor?          @relation(fields: [tenantId, actorId], references: [tenantId, id])
-  sourceArtifact SourceArtifact? @relation(fields: [tenantId, sourceArtifactId], references: [tenantId, id])
-  supersededBy   Memory?         @relation("MemorySupersession", fields: [tenantId, supersededById], references: [tenantId, id])
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], map: "memories_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
+  workspace      Workspace?      @relation(fields: [tenantId, workspaceId], references: [tenantId, id], map: "memories_tenant_workspace_fkey", onDelete: NoAction, onUpdate: NoAction)
+  project        Project?        @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id], map: "memories_tenant_workspace_project_fkey", onDelete: NoAction, onUpdate: NoAction)
+  actor          Actor?          @relation(fields: [tenantId, actorId], references: [tenantId, id], map: "memories_tenant_actor_fkey", onDelete: NoAction, onUpdate: NoAction)
+  sourceArtifact SourceArtifact? @relation(fields: [tenantId, sourceArtifactId], references: [tenantId, id], map: "memories_tenant_source_artifact_fkey", onDelete: NoAction, onUpdate: NoAction)
+  supersededBy   Memory?         @relation("MemorySupersession", fields: [tenantId, supersededById], references: [tenantId, id], map: "memories_superseded_by_fkey", onDelete: NoAction, onUpdate: NoAction)
   superseded     Memory[]        @relation("MemorySupersession")
 
-  revisions   MemoryRevision[]
-  embeddings  MemoryEmbedding[]
-  auditEvents MemoryAuditEvent[]
+  revisions          MemoryRevision[]
+  embeddings         MemoryEmbedding[]
+  auditEvents        MemoryAuditEvent[]
+  approvedCandidates MemoryCandidate[]
 
-  @@unique([tenantId, id])
-  @@index([tenantId, scopeType, scopeId, status, updatedAt(dsc: true)])
-  @@index([tenantId, actorId, status, updatedAt(dsc: true)])
-  @@index([tenantId, sourceArtifactId])
-  @@index([tenantId, contentHash])
+  @@unique([tenantId, id], map: "memories_tenant_id_unique")
+  @@index([tenantId, scopeType, scopeId, status, updatedAt], map: "memories_scope_lookup_idx")
+  @@index([tenantId, actorId, status, updatedAt], map: "memories_actor_lookup_idx")
+  @@index([tenantId, sourceArtifactId], map: "memories_source_artifact_lookup_idx")
+  @@index([tenantId, contentHash], map: "memories_content_hash_idx")
   @@map("memories")
 }
 
@@ -183,11 +201,11 @@ model MemoryRevision {
   createdByActorId String?  @map("created_by_actor_id") @db.Uuid
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  memory Memory @relation(fields: [tenantId, memoryId], references: [tenantId, id])
-  actor  Actor? @relation(fields: [tenantId, createdByActorId], references: [tenantId, id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], map: "memory_revisions_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
+  memory Memory @relation(fields: [tenantId, memoryId], references: [tenantId, id], map: "memory_revisions_memory_fkey", onDelete: NoAction, onUpdate: NoAction)
+  actor  Actor? @relation(fields: [tenantId, createdByActorId], references: [tenantId, id], map: "memory_revisions_actor_fkey", onDelete: NoAction, onUpdate: NoAction)
 
-  @@unique([tenantId, memoryId, revisionNumber])
+  @@unique([tenantId, memoryId, revisionNumber], map: "memory_revisions_unique")
   @@map("memory_revisions")
 }
 
@@ -203,11 +221,11 @@ model MemoryEmbedding {
   embedding           Unsupported("vector(1024)") @map("embedding")
   createdAt           DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  memory Memory @relation(fields: [tenantId, memoryId], references: [tenantId, id])
+  tenant Tenant @relation(fields: [tenantId], references: [id], map: "memory_embeddings_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
+  memory Memory @relation(fields: [tenantId, memoryId], references: [tenantId, id], map: "memory_embeddings_memory_fkey", onDelete: NoAction, onUpdate: NoAction)
 
-  @@unique([tenantId, memoryId, embeddingModel, embeddingDimensions])
-  @@index([tenantId, memoryId])
+  @@unique([tenantId, memoryId, embeddingModel, embeddingDimensions], map: "memory_embeddings_unique")
+  @@index([tenantId, memoryId], map: "memory_embeddings_memory_idx")
   @@map("memory_embeddings")
 }
 
@@ -226,13 +244,13 @@ model MemoryAuditEvent {
   metadata    Json     @default("{}") @db.JsonB
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
-  project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
-  actor     Actor?     @relation(fields: [tenantId, actorId], references: [tenantId, id])
-  memory    Memory?    @relation(fields: [tenantId, memoryId], references: [tenantId, id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], map: "memory_audit_events_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
+  workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id], map: "audit_events_tenant_workspace_fkey", onDelete: NoAction, onUpdate: NoAction)
+  project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id], map: "audit_events_tenant_workspace_project_fkey", onDelete: NoAction, onUpdate: NoAction)
+  actor     Actor?     @relation(fields: [tenantId, actorId], references: [tenantId, id], map: "audit_events_tenant_actor_fkey", onDelete: NoAction, onUpdate: NoAction)
+  memory    Memory?    @relation(fields: [tenantId, memoryId], references: [tenantId, id], map: "audit_events_tenant_memory_fkey", onDelete: NoAction, onUpdate: NoAction)
 
-  @@index([tenantId, createdAt(dsc: true)])
+  @@index([tenantId, createdAt], map: "audit_events_tenant_created_idx")
   @@map("memory_audit_events")
 }
 
@@ -254,12 +272,118 @@ model ApiKey {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  actor     Actor      @relation(fields: [tenantId, actorId], references: [tenantId, id])
-  workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id])
-  project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], map: "api_keys_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
+  actor     Actor      @relation(fields: [tenantId, actorId], references: [tenantId, id], map: "api_keys_tenant_actor_fkey", onDelete: NoAction, onUpdate: NoAction)
+  workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id], map: "api_keys_tenant_workspace_fkey", onDelete: NoAction, onUpdate: NoAction)
+  project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id], map: "api_keys_tenant_workspace_project_fkey", onDelete: NoAction, onUpdate: NoAction)
 
-  @@unique([keyHash])
-  @@unique([tenantId, id])
+  @@unique([keyHash], map: "api_keys_key_hash_unique")
+  @@unique([tenantId, id], map: "api_keys_tenant_id_unique")
+  @@index([tenantId, status], map: "api_keys_tenant_status_idx")
+  @@index([tenantId, actorId, status], map: "api_keys_tenant_actor_status_idx")
+  @@index([keyPrefix], map: "api_keys_key_prefix_idx")
   @@map("api_keys")
+}
+
+/// A harvest extraction run that produces memory candidates.
+model HarvestRun {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  workspaceId      String?   @map("workspace_id") @db.Uuid
+  projectId        String?   @map("project_id") @db.Uuid
+  actorId          String?   @map("actor_id") @db.Uuid
+  sourceArtifactId String?   @map("source_artifact_id") @db.Uuid
+  scopeType        String    @map("scope_type") @db.String
+  scopeId          String    @map("scope_id") @db.Uuid
+  status           String    @default("PENDING") @db.String
+  title            String?   @db.String
+  errorMessage     String?   @map("error_message") @db.String
+  metadata         Json      @default("{}") @db.JsonB
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], map: "harvest_runs_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
+  workspace      Workspace?        @relation(fields: [tenantId, workspaceId], references: [tenantId, id], map: "harvest_runs_tenant_workspace_fkey", onDelete: NoAction, onUpdate: NoAction)
+  project        Project?          @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id], map: "harvest_runs_tenant_workspace_project_fkey", onDelete: NoAction, onUpdate: NoAction)
+  actor          Actor?            @relation(fields: [tenantId, actorId], references: [tenantId, id], map: "harvest_runs_tenant_actor_fkey", onDelete: NoAction, onUpdate: NoAction)
+  sourceArtifact SourceArtifact?   @relation(fields: [tenantId, sourceArtifactId], references: [tenantId, id], map: "harvest_runs_tenant_source_artifact_fkey", onDelete: NoAction, onUpdate: NoAction)
+  candidates     MemoryCandidate[]
+
+  @@unique([tenantId, id], map: "harvest_runs_tenant_id_unique")
+  @@index([tenantId, status, createdAt], map: "harvest_runs_tenant_status_created_idx")
+  @@map("harvest_runs")
+}
+
+/// A proposed memory awaiting review before becoming authoritative.
+model MemoryCandidate {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  workspaceId      String?   @map("workspace_id") @db.Uuid
+  projectId        String?   @map("project_id") @db.Uuid
+  harvestRunId     String    @map("harvest_run_id") @db.Uuid
+  sourceArtifactId String?   @map("source_artifact_id") @db.Uuid
+  scopeType        String    @map("scope_type") @db.String
+  scopeId          String    @map("scope_id") @db.Uuid
+  memoryType       String    @map("memory_type") @db.String
+  status           String    @default("PENDING") @db.String
+  content          String    @db.String
+  contentHash      String    @map("content_hash") @db.String
+  confidence       Decimal   @default(1.0000) @db.Decimal(5, 4)
+  relatedMemoryIds Json      @default("[]") @map("related_memory_ids") @db.JsonB
+  approvedMemoryId String?   @map("approved_memory_id") @db.Uuid
+  reviewReason     String?   @map("review_reason") @db.String
+  metadata         Json      @default("{}") @db.JsonB
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  reviewedAt       DateTime? @map("reviewed_at") @db.Timestamptz(6)
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], map: "memory_candidates_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
+  workspace      Workspace?      @relation(fields: [tenantId, workspaceId], references: [tenantId, id], map: "memory_candidates_tenant_workspace_fkey", onDelete: NoAction, onUpdate: NoAction)
+  project        Project?        @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id], map: "memory_candidates_tenant_workspace_project_fkey", onDelete: NoAction, onUpdate: NoAction)
+  harvestRun     HarvestRun      @relation(fields: [tenantId, harvestRunId], references: [tenantId, id], map: "memory_candidates_harvest_run_fkey", onDelete: NoAction, onUpdate: NoAction)
+  sourceArtifact SourceArtifact? @relation(fields: [tenantId, sourceArtifactId], references: [tenantId, id], map: "memory_candidates_tenant_source_artifact_fkey", onDelete: NoAction, onUpdate: NoAction)
+  approvedMemory Memory?         @relation(fields: [tenantId, approvedMemoryId], references: [tenantId, id], map: "memory_candidates_tenant_approved_memory_fkey", onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenantId, id], map: "memory_candidates_tenant_id_unique")
+  @@index([tenantId, harvestRunId, status], map: "memory_candidates_tenant_run_status_idx")
+  @@index([tenantId, status, createdAt], map: "memory_candidates_tenant_status_created_idx")
+  @@map("memory_candidates")
+}
+
+/// A published intelligence artifact synced to external collaboration storage.
+model PublishedArtifact {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String    @map("tenant_id") @db.Uuid
+  workspaceId            String?   @map("workspace_id") @db.Uuid
+  projectId              String?   @map("project_id") @db.Uuid
+  actorId                String?   @map("actor_id") @db.Uuid
+  scopeType              String    @map("scope_type") @db.String
+  scopeId                String    @map("scope_id") @db.Uuid
+  provider               String    @db.String
+  externalFileId         String?   @map("external_file_id") @db.String
+  externalUrl            String?   @map("external_url") @db.String
+  parentFolderId         String?   @map("parent_folder_id") @db.String
+  artifactType           String    @map("artifact_type") @db.String
+  title                  String    @db.String
+  content                String    @db.String
+  sourceMemoryIds        Json      @default("[]") @map("source_memory_ids") @db.JsonB
+  sourceRevisionIds      Json      @default("[]") @map("source_revision_ids") @db.JsonB
+  publishedAt            DateTime  @default(now()) @map("published_at") @db.Timestamptz(6)
+  lastExternalModifiedAt DateTime? @map("last_external_modified_at") @db.Timestamptz(6)
+  lastSyncedContentHash  String    @map("last_synced_content_hash") @db.String
+  syncDirection          String    @map("sync_direction") @db.String
+  syncStatus             String    @map("sync_status") @db.String
+  metadata               Json      @default("{}") @db.JsonB
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], map: "published_artifacts_tenant_fkey", onDelete: NoAction, onUpdate: NoAction)
+  workspace Workspace? @relation(fields: [tenantId, workspaceId], references: [tenantId, id], map: "published_artifacts_tenant_workspace_fkey", onDelete: NoAction, onUpdate: NoAction)
+  project   Project?   @relation(fields: [tenantId, workspaceId, projectId], references: [tenantId, workspaceId, id], map: "published_artifacts_tenant_workspace_project_fkey", onDelete: NoAction, onUpdate: NoAction)
+  actor     Actor?     @relation(fields: [tenantId, actorId], references: [tenantId, id], map: "published_artifacts_tenant_actor_fkey", onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenantId, id], map: "published_artifacts_tenant_id_unique")
+  @@index([tenantId, syncStatus, updatedAt], map: "published_artifacts_tenant_sync_updated_idx")
+  @@map("published_artifacts")
 }

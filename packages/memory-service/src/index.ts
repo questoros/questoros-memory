@@ -39,6 +39,29 @@ export {
 } from './embeddings.js';
 export type { GenerateEmbeddingOptions } from './embeddings.js';
 export {
+  extractCandidatesFromText,
+  analyzeCandidateAgainstMemories,
+  recommendationForAnalysisStatus,
+  createHarvestRun,
+  getHarvestRun,
+  listCandidates,
+  getCandidate,
+  approveCandidate,
+  rejectCandidate,
+  createContextPackage,
+  publishArtifact,
+  getPublishedArtifact,
+  syncPublishedArtifact,
+  republishArtifact,
+  __setStubDriveContent,
+  __simulateExternalDriveEdit,
+  __registerDriveBackend,
+  __resetDriveBackends,
+  __setHarvestReasoningProvider,
+  __getHarvestReasoningProvider,
+} from './phase5.js';
+export type { DriveBackend } from './phase5.js';
+export {
   transportWhoami,
   transportCreateMemory,
   transportGetMemory,
@@ -49,5 +72,16 @@ export {
   transportRevisionHistory,
   transportUpsertEmbedding,
   transportGenerateEmbedding,
+  transportCreateHarvestRun,
+  transportGetHarvestRun,
+  transportListCandidates,
+  transportGetCandidate,
+  transportApproveCandidate,
+  transportRejectCandidate,
+  transportCreateContextPackage,
+  transportPublishArtifact,
+  transportGetPublishedArtifact,
+  transportSyncPublishedArtifact,
+  transportRepublishArtifact,
   transportReadyz,
 } from './transport.js';

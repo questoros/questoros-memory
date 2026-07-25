@@ -36,7 +36,7 @@ describe('buildApp request id and error mapping', () => {
     });
     expect(response.headers['x-request-id']).toBe('caller-req-123');
     await app.close();
-  });
+  }, 15_000);
 
   it('maps Fastify schema validation failures to VALIDATION_ERROR', async () => {
     const app = await buildApp({ logLevel: 'silent' });

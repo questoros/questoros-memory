@@ -65,8 +65,8 @@ function createMockServer() {
 }
 
 describe('MCP_TOOL_NAMES', () => {
-  it('exports exactly ten stable tool names', () => {
-    expect(MCP_TOOL_NAMES).toHaveLength(10);
+  it('exports exactly eighteen stable tool names', () => {
+    expect(MCP_TOOL_NAMES).toHaveLength(18);
     expect(MCP_TOOL_NAMES).toEqual([
       'questoros_memory_whoami',
       'questoros_memory_create',
@@ -78,6 +78,14 @@ describe('MCP_TOOL_NAMES', () => {
       'questoros_memory_history',
       'questoros_memory_set_embedding',
       'questoros_memory_generate_embedding',
+      'questoros_memory_harvest_run',
+      'questoros_memory_list_candidates',
+      'questoros_memory_get_candidate',
+      'questoros_memory_approve_candidate',
+      'questoros_memory_reject_candidate',
+      'questoros_memory_context_package',
+      'questoros_memory_publish_artifact',
+      'questoros_memory_sync_artifact',
     ]);
   });
 });

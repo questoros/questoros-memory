@@ -1,5 +1,14 @@
 import { z } from 'zod';
-import { SCOPE_TYPES, MEMORY_TYPES, MEMORY_STATUSES, SENSITIVITY_VALUES } from './memory-types.js';
+import {
+  SCOPE_TYPES,
+  MEMORY_TYPES,
+  MEMORY_STATUSES,
+  SENSITIVITY_VALUES,
+  CANDIDATE_STATUSES,
+  HARVEST_RUN_STATUSES,
+  SYNC_DIRECTIONS,
+  SYNC_STATUSES,
+} from './memory-types.js';
 import { API_PERMISSIONS } from './permissions.js';
 import { ERROR_CODES, ServiceError } from './errors.js';
 import { ICARE_LIFECYCLE_STAGES } from './icare.js';
@@ -596,6 +605,210 @@ export const setEmbeddingToolShape = {
 export const generateEmbeddingToolShape = {
   memoryId: uuidSchema,
   force: z.boolean().optional(),
+} as const;
+
+export const candidateStatusSchema = z.enum(CANDIDATE_STATUSES);
+export const harvestRunStatusSchema = z.enum(HARVEST_RUN_STATUSES);
+export const syncDirectionSchema = z.enum(SYNC_DIRECTIONS);
+export const syncStatusSchema = z.enum(SYNC_STATUSES);
+
+export const createHarvestRunRequestSchema = z
+  .object({
+    scopeType: scopeTypeSchema,
+    workspaceId: uuidSchema.optional(),
+    projectId: uuidSchema.optional(),
+    sourceText: contentStringSchema('sourceText'),
+    sourceType: z.enum(['UPLOAD', 'HARVEST', 'DOCUMENT', 'DRIVE', 'MANUAL']).default('UPLOAD'),
+    sourceUri: z.string().trim().max(2048).optional(),
+    title: titleSchema.optional(),
+    reasoningChainId: uuidSchema.optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    rejectAuthoritativeIdentity(value, ctx);
+    if (value.scopeType === 'TENANT' && (value.workspaceId || value.projectId)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'TENANT scope must not include workspaceId or projectId.',
+      });
+    }
+    if (value.scopeType === 'WORKSPACE' && !value.workspaceId) {
+      ctx.addIssue({ code: 'custom', path: ['workspaceId'], message: 'workspaceId is required.' });
+    }
+    if (value.scopeType === 'WORKSPACE' && value.projectId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['projectId'],
+        message: 'WORKSPACE scope must not include projectId.',
+      });
+    }
+    if (value.scopeType === 'PROJECT' && (!value.workspaceId || !value.projectId)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'PROJECT scope requires workspaceId and projectId.',
+      });
+    }
+  });
+
+export const listCandidatesQuerySchema = z
+  .object({
+    harvestRunId: uuidSchema.optional(),
+    status: candidateStatusSchema.optional(),
+    scopeType: scopeTypeSchema.optional(),
+    workspaceId: uuidSchema.optional(),
+    projectId: uuidSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(MAX_LIST_LIMIT).optional(),
+  })
+  .strict();
+
+export const candidateIdParamsSchema = z
+  .object({
+    candidateId: uuidSchema,
+  })
+  .strict();
+
+export const harvestRunIdParamsSchema = z
+  .object({
+    runId: uuidSchema,
+  })
+  .strict();
+
+export const approveCandidateRequestSchema = z
+  .object({
+    reason: boundedStringBytes(MAX_REASON_BYTES, 'reason').optional(),
+    /** Explicit admin override when policyAllowed=false. Requires memory:admin. */
+    overridePolicy: z.boolean().optional(),
+    overrideReason: boundedStringBytes(MAX_REASON_BYTES, 'overrideReason').optional(),
+    /** Explicit merge for DUPLICATE / NEAR_DUPLICATE candidates. */
+    mergeIntoMemoryId: uuidSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.overridePolicy === true && !value.overrideReason?.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['overrideReason'],
+        message: 'overrideReason is required when overridePolicy is true.',
+      });
+    }
+  });
+
+export const rejectCandidateRequestSchema = z
+  .object({
+    reason: boundedStringBytes(MAX_REASON_BYTES, 'reason'),
+  })
+  .strict();
+
+export const createContextPackageRequestSchema = z
+  .object({
+    scopeType: scopeTypeSchema,
+    workspaceId: uuidSchema.optional(),
+    projectId: uuidSchema.optional(),
+    memoryTypes: z.array(memoryTypeSchema).max(MEMORY_TYPES.length).optional(),
+    limit: z.number().int().min(1).max(MAX_SEARCH_LIMIT).optional(),
+    queryText: z.string().optional(),
+    reasoningChainId: uuidSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    rejectAuthoritativeIdentity(value, ctx);
+  });
+
+export const publishArtifactRequestSchema = z
+  .object({
+    scopeType: scopeTypeSchema,
+    workspaceId: uuidSchema.optional(),
+    projectId: uuidSchema.optional(),
+    artifactType: z.string().trim().min(1).max(128).default('INTELLIGENCE_BRIEF'),
+    title: titleSchema,
+    content: contentStringSchema('content').optional(),
+    sourceMemoryIds: z.array(uuidSchema).max(MAX_RELATED_MEMORY_IDS).default([]),
+    sourceRevisionIds: z.array(uuidSchema).max(MAX_RELATED_MEMORY_IDS).default([]),
+    provider: z
+      .enum(['stub', 'google-drive', 'microsoft-onedrive', 'microsoft-sharepoint'])
+      .default('stub'),
+    parentFolderId: z.string().trim().max(512).optional(),
+    driveId: z.string().trim().max(512).optional(),
+    siteId: z.string().trim().max(512).optional(),
+    syncDirection: syncDirectionSchema.default('BIDIRECTIONAL_REVIEWED'),
+    reasoningChainId: uuidSchema.optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    rejectAuthoritativeIdentity(value, ctx);
+  });
+
+export const publishedArtifactIdParamsSchema = z
+  .object({
+    artifactId: uuidSchema,
+  })
+  .strict();
+
+export const republishArtifactRequestSchema = z
+  .object({
+    approvedCandidateId: uuidSchema,
+    sourceMemoryIds: z.array(uuidSchema).max(MAX_RELATED_MEMORY_IDS).min(1),
+    sourceRevisionIds: z.array(uuidSchema).max(MAX_RELATED_MEMORY_IDS).min(1),
+    reasoningChainId: uuidSchema.optional(),
+  })
+  .strict();
+
+export const harvestRunToolShape = {
+  scopeType: scopeTypeSchema,
+  workspaceId: uuidSchema.optional(),
+  projectId: uuidSchema.optional(),
+  sourceText: z.string().min(1),
+  sourceType: z.enum(['UPLOAD', 'HARVEST', 'DOCUMENT', 'DRIVE', 'MANUAL']).optional(),
+  title: titleSchema.optional(),
+} as const;
+
+export const listCandidatesToolShape = {
+  harvestRunId: uuidSchema.optional(),
+  status: candidateStatusSchema.optional(),
+  limit: z.number().int().min(1).max(MAX_LIST_LIMIT).optional(),
+} as const;
+
+export const getCandidateToolShape = {
+  candidateId: uuidSchema,
+} as const;
+
+export const approveCandidateToolShape = {
+  candidateId: uuidSchema,
+  reason: z.string().optional(),
+} as const;
+
+export const rejectCandidateToolShape = {
+  candidateId: uuidSchema,
+  reason: z.string().min(1),
+} as const;
+
+export const contextPackageToolShape = {
+  scopeType: scopeTypeSchema,
+  workspaceId: uuidSchema.optional(),
+  projectId: uuidSchema.optional(),
+  queryText: z.string().optional(),
+  limit: z.number().int().min(1).max(MAX_SEARCH_LIMIT).optional(),
+} as const;
+
+export const publishArtifactToolShape = {
+  scopeType: scopeTypeSchema,
+  workspaceId: uuidSchema.optional(),
+  projectId: uuidSchema.optional(),
+  title: titleSchema,
+  content: z.string().min(1),
+  sourceMemoryIds: z.array(uuidSchema).optional(),
+  provider: z
+    .enum(['stub', 'google-drive', 'microsoft-onedrive', 'microsoft-sharepoint'])
+    .optional(),
+  syncDirection: syncDirectionSchema.optional(),
+  driveId: z.string().optional(),
+  siteId: z.string().optional(),
+} as const;
+
+export const syncArtifactToolShape = {
+  artifactId: uuidSchema,
 } as const;
 
 // ── Inferred types ─────────────────────────────────────────────

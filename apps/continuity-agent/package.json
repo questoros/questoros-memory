@@ -1,0 +1,26 @@
+{
+  "name": "@questoros-memory/continuity-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reference Continuity Agent that uses only the public QuestorOS Memory SDK",
+  "type": "module",
+  "main": "./dist/agent.js",
+  "types": "./dist/agent.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "demo:launch": "tsx src/demo-launch.ts"
+  },
+  "dependencies": {
+    "@questoros-memory/reasoning-provider": "workspace:*",
+    "@questoros-memory/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.10"
+  }
+}

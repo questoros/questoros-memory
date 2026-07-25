@@ -520,7 +520,7 @@ export async function softDeleteMemory(
 // ── Get revisions ──────────────────────────────────────────────
 
 export async function getRevisions(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   tenantId: string,
   memoryId: string,
 ): Promise<RevisionRow[]> {
@@ -534,6 +534,23 @@ export async function getRevisions(
     ORDER BY revision_number ASC
   `;
   return result;
+}
+
+export async function getRevision(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  tenantId: string,
+  revisionId: string,
+): Promise<RevisionRow | null> {
+  const result = await prisma.$queryRaw<RevisionRow[]>`
+    SELECT
+      id, tenant_id AS "tenantId", memory_id AS "memoryId",
+      revision_number AS "revisionNumber", content, content_hash AS "contentHash",
+      reason, created_by_actor_id AS "createdByActorId", created_at AS "createdAt"
+    FROM memory_revisions
+    WHERE tenant_id = ${tenantId}::uuid AND id = ${revisionId}::uuid
+    LIMIT 1
+  `;
+  return result[0] ?? null;
 }
 
 export async function getMaxRevisionNumber(
