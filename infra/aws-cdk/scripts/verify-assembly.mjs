@@ -29,11 +29,17 @@ if (!fs.existsSync(outDir)) {
 }
 
 const files = walk(outDir);
-const handlerCandidates = files.filter(
+const indexAssets = files.filter(
   (file) => path.basename(file) === 'index.js' && file.includes(`${path.sep}asset.`),
 );
+const handlerCandidates = indexAssets.filter((file) => {
+  const source = fs.readFileSync(file, 'utf8');
+  return source.includes('RUNTIME_NOT_READY') && source.includes('Memory API runtime is not ready.');
+});
 if (handlerCandidates.length !== 1) {
-  fail(`expected one Lambda index.js asset, found ${handlerCandidates.length}.`);
+  fail(
+    `expected one QuestorOS Memory Lambda asset, found ${handlerCandidates.length} among ${indexAssets.length} index.js assets.`,
+  );
 }
 
 const handlerPath = handlerCandidates[0];
@@ -73,12 +79,16 @@ if (!templatePath) {
 }
 const template = JSON.parse(fs.readFileSync(templatePath, 'utf8'));
 const resources = Object.values(template.Resources ?? {});
-const lambdaFunctions = resources.filter((resource) => resource?.Type === 'AWS::Lambda::Function');
-if (lambdaFunctions.length !== 1) {
-  fail(`expected one Lambda function, found ${lambdaFunctions.length}.`);
+const applicationFunctions = resources.filter(
+  (resource) =>
+    resource?.Type === 'AWS::Lambda::Function' &&
+    resource?.Properties?.FunctionName === 'questoros-memory-staging-api',
+);
+if (applicationFunctions.length !== 1) {
+  fail(`expected one named Memory API Lambda function, found ${applicationFunctions.length}.`);
 }
 
-const functionProperties = lambdaFunctions[0].Properties ?? {};
+const functionProperties = applicationFunctions[0].Properties ?? {};
 if (functionProperties.Runtime !== 'nodejs24.x') {
   fail('Lambda runtime is not nodejs24.x.');
 }
