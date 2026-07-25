@@ -24,7 +24,8 @@ export const DRIVE_PROVIDERS = [
 export type DriveProviderName = (typeof DRIVE_PROVIDERS)[number];
 
 export interface PublishedArtifactMetadata {
-  provider: DriveProviderName;
+  /** Canonical provider id when known; stored as string for persisted rows. */
+  provider: string;
   /** Provider drive / library root identifier (OneDrive driveId or Google drive). */
   driveId?: string | null;
   /** SharePoint site id when provider is microsoft-sharepoint. */

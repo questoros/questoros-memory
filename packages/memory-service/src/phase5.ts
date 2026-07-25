@@ -956,11 +956,14 @@ export async function syncPublishedArtifact(
     throw new ServiceError(ERROR_CODES.VALIDATION_ERROR, 'Artifact has no external file id.', 400);
   }
 
+  const publishedMeta = asMetadataRecord(row.metadata);
   let change;
   try {
     change = await stubDrive.detectChange(
       {
         provider: row.provider,
+        driveId: typeof publishedMeta.driveId === 'string' ? publishedMeta.driveId : null,
+        siteId: typeof publishedMeta.siteId === 'string' ? publishedMeta.siteId : null,
         externalFileId: externalId,
         externalUrl: row.externalUrl,
         parentFolderId: row.parentFolderId,
@@ -1102,6 +1105,8 @@ export async function republishArtifact(
   const republished = await stubDrive.republish(
     {
       provider: row.provider,
+      driveId: typeof artifactMeta.driveId === 'string' ? artifactMeta.driveId : null,
+      siteId: typeof artifactMeta.siteId === 'string' ? artifactMeta.siteId : null,
       externalFileId: row.externalFileId,
       externalUrl: row.externalUrl,
       parentFolderId: row.parentFolderId,
