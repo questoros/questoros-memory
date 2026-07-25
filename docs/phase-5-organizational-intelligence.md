@@ -143,9 +143,19 @@ Gated harness: `pnpm acceptance:phase5` (`RUN_PHASE5_ACCEPTANCE=true` + `DATABAS
 Proven against the real CockroachDB development database, in-process REST API, and public SDK:
 
 - Harborview synthetic harvest → governed candidates → approve correction / reject private
+- Exact correction revision history (rev1 July 15 → rev2 August 20) and concurrent approval 409
 - Context package + intelligence brief
 - Fake Google Drive, OneDrive, and SharePoint publish + `SYNC_CONFLICT` (no live Drive/Microsoft calls)
+- Fail-closed unconfigured Drive providers, publication provenance rejection, governed republish
+- Relational FK verification (`db:verify`) and gated Phase 5 recovery script refusal
 - New Continuity Agent session (empty chat history) recalls August 20, respects no-paid-advertising, writes Markdown artifact, persists checkpoint / outcome / lesson
 - Cross-tenant isolation + full teardown of acceptance-scoped rows
+
+### Migration recovery (already completed)
+
+The one-time recovery for `20260725100000_phase5_harvest_candidates_publish` already completed.
+Normal users must use Prisma migrations (`pnpm db:migrate` / `prisma migrate deploy`), never
+`packages/database/scripts/recover-phase5-migration.mjs`. That script is archived behind explicit
+safety gates and refuses to run from CI or without confirmation.
 
 Live model, Google, Microsoft, and AWS deploy: **none**. Draft PR #6 remains unmerged.

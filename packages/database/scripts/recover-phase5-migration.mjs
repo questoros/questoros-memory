@@ -1,10 +1,63 @@
+/**
+ * ARCHIVED one-time Phase 5 migration recovery helper.
+ *
+ * The partial-migration recovery for
+ * `20260725100000_phase5_harvest_candidates_publish` already completed.
+ * Normal users must use Prisma migrations (`pnpm db:migrate`), never this script.
+ *
+ * This file refuses to run unless every safety gate is present. It never runs
+ * from install/build/test/CI and never prints DATABASE_URL.
+ */
 import 'dotenv/config';
 import pg from 'pg';
 
+function refuse(message) {
+  console.error(message);
+  process.exit(1);
+}
+
+if (process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true') {
+  refuse('Phase 5 migration recovery is refused in CI.');
+}
+
+if (process.env.RUN_PHASE5_MIGRATION_RECOVERY !== 'true') {
+  refuse(
+    'Phase 5 migration recovery is gated. Recovery already completed; use Prisma migrations. Set RUN_PHASE5_MIGRATION_RECOVERY=true only for an approved, documented re-run.',
+  );
+}
+
+const expectedCluster = process.env.PHASE5_RECOVERY_EXPECTED_CLUSTER?.trim();
+if (!expectedCluster) {
+  refuse('PHASE5_RECOVERY_EXPECTED_CLUSTER is required (exact cluster/host identifier).');
+}
+
+const confirm = process.env.PHASE5_RECOVERY_CONFIRM?.trim();
+if (confirm !== 'RECOVER-PHASE5') {
+  refuse('PHASE5_RECOVERY_CONFIRM must equal RECOVER-PHASE5.');
+}
+
+const databaseUrl = process.env.DATABASE_URL?.trim();
+if (!databaseUrl) {
+  refuse('DATABASE_URL is required.');
+}
+
+if (!databaseUrl.includes(expectedCluster)) {
+  refuse(
+    'DATABASE_URL does not match PHASE5_RECOVERY_EXPECTED_CLUSTER. Refusing unknown environment.',
+  );
+}
+
+const allowInsecureTls = process.env.PHASE5_RECOVERY_ALLOW_INSECURE_TLS === 'true';
 const client = new pg.Client({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  connectionString: databaseUrl,
+  ssl: allowInsecureTls ? { rejectUnauthorized: false } : { rejectUnauthorized: true },
 });
+
+if (allowInsecureTls) {
+  console.error(
+    'WARNING: PHASE5_RECOVERY_ALLOW_INSECURE_TLS=true disables TLS certificate verification. Approved documented recovery only.',
+  );
+}
 
 const statements = [
   `ALTER TABLE harvest_runs SET (schema_locked = false)`,
@@ -76,7 +129,7 @@ try {
     await client.query(statement);
     console.log('ok');
   }
-  console.log('Phase 5 recovery complete');
+  console.log('Phase 5 recovery complete (gated re-run)');
 } finally {
   await client.end();
 }
