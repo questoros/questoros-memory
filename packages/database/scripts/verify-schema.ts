@@ -67,9 +67,27 @@ const REQUIRED_FKS: Record<string, string[]> = {
     'api_keys_tenant_workspace_fkey',
     'api_keys_tenant_workspace_project_fkey',
   ],
-  harvest_runs: ['harvest_runs_tenant_fkey'],
-  memory_candidates: ['memory_candidates_tenant_fkey', 'memory_candidates_harvest_run_fkey'],
-  published_artifacts: ['published_artifacts_tenant_fkey'],
+  harvest_runs: [
+    'harvest_runs_tenant_fkey',
+    'harvest_runs_tenant_workspace_fkey',
+    'harvest_runs_tenant_workspace_project_fkey',
+    'harvest_runs_tenant_actor_fkey',
+    'harvest_runs_tenant_source_artifact_fkey',
+  ],
+  memory_candidates: [
+    'memory_candidates_tenant_fkey',
+    'memory_candidates_harvest_run_fkey',
+    'memory_candidates_tenant_workspace_fkey',
+    'memory_candidates_tenant_workspace_project_fkey',
+    'memory_candidates_tenant_source_artifact_fkey',
+    'memory_candidates_tenant_approved_memory_fkey',
+  ],
+  published_artifacts: [
+    'published_artifacts_tenant_fkey',
+    'published_artifacts_tenant_workspace_fkey',
+    'published_artifacts_tenant_workspace_project_fkey',
+    'published_artifacts_tenant_actor_fkey',
+  ],
 };
 
 // Required unique constraints
