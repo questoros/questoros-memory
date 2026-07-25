@@ -207,4 +207,12 @@ export class MemoryApiClient {
       body ?? {},
     );
   }
+
+  republishArtifact(artifactId: string, body: unknown): Promise<unknown> {
+    return this.request(
+      'POST',
+      `/v1/publish/artifacts/${encodeURIComponent(artifactId)}/republish`,
+      body,
+    );
+  }
 }

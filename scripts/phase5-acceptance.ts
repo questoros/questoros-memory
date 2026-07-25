@@ -13,6 +13,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import {
   getDatabaseClient,
   disconnectDatabaseClient,
@@ -481,6 +482,56 @@ async function main(): Promise<void> {
       record('reject-candidate', false, 'no rejectable candidate found');
     }
 
+    // Concurrent approval race on a disposable conflict (before Harborview correction).
+    {
+      await client.createMemory({
+        content: 'Budget due: March 1, 2026',
+        memoryType: 'FACT',
+        scopeType: 'PROJECT',
+        workspaceId,
+        projectId,
+        icareStage: 'CONTEXT',
+        title: 'Stale budget due',
+      });
+      const raceHarvest = asRecord(
+        await client.createHarvestRun({
+          scopeType: 'PROJECT',
+          workspaceId,
+          projectId,
+          sourceText:
+            'Budget due: April 15, 2026 is the authoritative deadline, not March 1, 2026.\n',
+          sourceType: 'DOCUMENT',
+          title: 'concurrency harvest',
+        }),
+      );
+      const raceCandidates = Array.isArray(raceHarvest.candidates)
+        ? raceHarvest.candidates.map(asRecord)
+        : [];
+      const raceConflict =
+        raceCandidates.find((c) => String(c.status) === 'CONFLICT') ??
+        raceCandidates.find((c) => /April\s+15/i.test(String(c.content))) ??
+        null;
+      if (raceConflict?.id) {
+        const raced = await Promise.allSettled([
+          client.approveCandidate(String(raceConflict.id), { reason: 'race-a' }),
+          client.approveCandidate(String(raceConflict.id), { reason: 'race-b' }),
+        ]);
+        const ok = raced.filter((r) => r.status === 'fulfilled');
+        const fail = raced.filter((r) => r.status === 'rejected');
+        record(
+          'concurrent-approval',
+          ok.length === 1 &&
+            fail.length === 1 &&
+            fail[0]!.status === 'rejected' &&
+            (fail[0] as PromiseRejectedResult).reason instanceof MemoryApiError &&
+            ((fail[0] as PromiseRejectedResult).reason as MemoryApiError).status === 409,
+          `fulfilled=${ok.length}; rejected=${fail.length}`,
+        );
+      } else {
+        record('concurrent-approval', false, 'no conflict candidate for race');
+      }
+    }
+
     const approved = asRecord(
       await client.approveCandidate(String(correctionCandidate!.id), {
         reason: 'Acceptance: supersede July 15 with August 20',
@@ -532,16 +583,24 @@ async function main(): Promise<void> {
     record('approve-durable-creates', approvedCreates > 0, `approvedCreates=${approvedCreates}`);
 
     const historyRaw = await client.getHistory(String(approvedMemory.id));
-    const historyText = JSON.stringify(historyRaw);
+    const historyRows = Array.isArray(historyRaw)
+      ? historyRaw.map(asRecord)
+      : Array.isArray(asRecord(historyRaw).revisions)
+        ? (asRecord(historyRaw).revisions as unknown[]).map(asRecord)
+        : Array.isArray(asRecord(historyRaw).items)
+          ? (asRecord(historyRaw).items as unknown[]).map(asRecord)
+          : [];
     const currentMemory = asRecord(await client.getMemory(String(approvedMemory.id)));
     const currentContent = String(asRecord(currentMemory.memory ?? currentMemory).content ?? '');
+    const rev1 = historyRows.find((r) => Number(r.revisionNumber) === 1);
+    const rev2 = historyRows.find((r) => Number(r.revisionNumber) === 2);
     record(
-      'revision-history',
-      (/July\s+15/i.test(historyText) || /July\s+15/i.test(currentContent)) &&
-        (/August\s+20/i.test(historyText) || /August\s+20/i.test(currentContent)) &&
-        /July\s+15/i.test(historyText) &&
-        /August\s+20/i.test(currentContent),
-      'prior July 15 in revisions; August 20 current',
+      'revision-history-exact',
+      historyRows.length === 2 &&
+        /July\s+15,\s*2026/i.test(String(rev1?.content ?? '')) &&
+        /August\s+20,\s*2026/i.test(String(rev2?.content ?? '')) &&
+        /August\s+20,\s*2026/i.test(currentContent),
+      `revisions=${historyRows.length}; rev1=${String(rev1?.content ?? '').slice(0, 40)}; rev2=${String(rev2?.content ?? '').slice(0, 40)}`,
     );
 
     const staleAfter = asRecord(await client.getMemory(staleMemoryId));
@@ -722,6 +781,242 @@ async function main(): Promise<void> {
     await proveProvider('google-drive', googleProvider);
     await proveProvider('microsoft-onedrive', onedriveProvider);
     await proveProvider('microsoft-sharepoint', sharepointProvider);
+
+    // Fail-closed: unconfigured named providers must 503 with no artifact insert.
+    {
+      const artifactCountBefore = (
+        await prisma.$queryRaw<{ n: bigint }[]>`
+          SELECT count(*)::bigint AS n FROM published_artifacts WHERE tenant_id = ${tenantId}::uuid
+        `
+      )[0]?.n;
+      __resetDriveBackends();
+      try {
+        await client.publishArtifact({
+          scopeType: 'PROJECT',
+          workspaceId,
+          projectId,
+          title: 'Should Fail Closed',
+          content: brief,
+          artifactType: 'intelligence-brief',
+          sourceMemoryIds,
+          sourceRevisionIds: revIds.slice(0, 2),
+          provider: 'google-drive',
+          syncDirection: 'BIDIRECTIONAL_REVIEWED',
+        });
+        record('fail-closed-google', false, 'unconfigured google-drive should 503');
+      } catch (error) {
+        const artifactCountAfter = (
+          await prisma.$queryRaw<{ n: bigint }[]>`
+            SELECT count(*)::bigint AS n FROM published_artifacts WHERE tenant_id = ${tenantId}::uuid
+          `
+        )[0]?.n;
+        record(
+          'fail-closed-google',
+          error instanceof MemoryApiError &&
+            error.status === 503 &&
+            String(artifactCountBefore) === String(artifactCountAfter),
+          error instanceof MemoryApiError
+            ? `status=${error.status}; artifacts unchanged`
+            : 'unexpected error',
+        );
+      }
+      // Re-register fakes for any later Drive-backed checks.
+      __registerDriveBackend('google-drive', googleProvider);
+      __registerDriveBackend('microsoft-onedrive', onedriveProvider);
+      __registerDriveBackend('microsoft-sharepoint', sharepointProvider);
+    }
+
+    // Provenance rejection: forged source memory must not publish.
+    try {
+      await client.publishArtifact({
+        scopeType: 'PROJECT',
+        workspaceId,
+        projectId,
+        title: 'Forged provenance',
+        content: brief,
+        artifactType: 'intelligence-brief',
+        sourceMemoryIds: [randomUUID()],
+        sourceRevisionIds: [],
+        provider: 'stub',
+        syncDirection: 'EXPORT_ONLY',
+      });
+      record('provenance-rejection', false, 'forged sourceMemoryId should fail');
+    } catch (error) {
+      record(
+        'provenance-rejection',
+        error instanceof MemoryApiError && (error.status === 404 || error.status === 403),
+        error instanceof MemoryApiError ? `status=${error.status}` : 'unexpected error',
+      );
+    }
+
+    // Governed republish after Google SYNC_CONFLICT.
+    {
+      const googleArtifactId = publishedArtifactIds[0];
+      if (!googleArtifactId) {
+        record('republish-governance', false, 'missing google artifact');
+      } else {
+        const gotArt = asRecord(await client.getPublishedArtifact(googleArtifactId));
+        const artRow = asRecord(gotArt.artifact);
+        const artMeta = asRecord(artRow.metadata);
+        const syncHarvestRunId = String(artMeta.syncHarvestRunId ?? '');
+        record(
+          'sync-harvest-linkage',
+          Boolean(syncHarvestRunId) &&
+            (String(artRow.syncStatus) === 'SYNC_CONFLICT' ||
+              String(artRow.syncStatus) === 'EXTERNAL_CHANGED'),
+          `status=${String(artRow.syncStatus)}; harvest=${syncHarvestRunId.slice(0, 8)}`,
+        );
+
+        try {
+          await client.republishArtifact(googleArtifactId, {
+            approvedCandidateId: randomUUID(),
+            sourceMemoryIds: [String(approvedMemory.id)],
+            sourceRevisionIds: revIds.slice(0, 1),
+          });
+          record('republish-unknown-candidate', false, 'should reject unknown candidate');
+        } catch (error) {
+          record(
+            'republish-unknown-candidate',
+            error instanceof MemoryApiError &&
+              (error.status === 404 || error.status === 400 || error.status === 409),
+            error instanceof MemoryApiError ? `status=${error.status}` : 'unexpected',
+          );
+        }
+
+        const syncListed = asRecord(
+          await client.listCandidates({
+            harvestRunId: syncHarvestRunId || undefined,
+            limit: 50,
+          }),
+        );
+        const syncCandidates = Array.isArray(syncListed.candidates)
+          ? syncListed.candidates.map(asRecord)
+          : [];
+        const reviewableSync = syncCandidates.filter(
+          (c) =>
+            String(c.status) === 'PENDING' ||
+            String(c.status) === 'CONFLICT' ||
+            String(c.status) === 'DUPLICATE' ||
+            String(c.status) === 'NEAR_DUPLICATE',
+        );
+
+        const pendingSync = reviewableSync.find((c) => String(c.status) === 'PENDING') ?? null;
+        if (pendingSync?.id) {
+          try {
+            await client.republishArtifact(googleArtifactId, {
+              approvedCandidateId: String(pendingSync.id),
+              sourceMemoryIds: [String(approvedMemory.id)],
+              sourceRevisionIds: revIds.slice(0, 1),
+            });
+            record('republish-pending-candidate', false, 'pending candidate should fail');
+          } catch (error) {
+            record(
+              'republish-pending-candidate',
+              error instanceof MemoryApiError && (error.status === 409 || error.status === 400),
+              error instanceof MemoryApiError ? `status=${error.status}` : 'unexpected',
+            );
+          }
+        } else {
+          record('republish-pending-candidate', true, 'no PENDING sync candidate; skipped');
+        }
+
+        let approvedSyncCandidateId = '';
+        let approvedSyncMemId = '';
+        for (const c of reviewableSync) {
+          try {
+            const body: Record<string, unknown> = {
+              reason: 'Acceptance: approve sync harvest candidate for republish',
+            };
+            if (String(c.status) === 'DUPLICATE' || String(c.status) === 'NEAR_DUPLICATE') {
+              body.mergeIntoMemoryId = String(approvedMemory.id);
+            }
+            const approvedSync = asRecord(await client.approveCandidate(String(c.id), body));
+            approvedSyncCandidateId = String(asRecord(approvedSync.candidate).id ?? c.id);
+            approvedSyncMemId = String(asRecord(approvedSync.memory).id ?? '');
+            break;
+          } catch {
+            // try next
+          }
+        }
+
+        if (approvedSyncCandidateId && approvedSyncMemId) {
+          const syncHistoryRaw = await client.getHistory(approvedSyncMemId);
+          const syncHistoryRows = Array.isArray(syncHistoryRaw)
+            ? syncHistoryRaw.map(asRecord)
+            : Array.isArray(asRecord(syncHistoryRaw).revisions)
+              ? (asRecord(syncHistoryRaw).revisions as unknown[]).map(asRecord)
+              : [];
+          const currentMem = asRecord(await client.getMemory(approvedSyncMemId));
+          const currentHash = String(asRecord(currentMem.memory ?? currentMem).contentHash ?? '');
+          const matchingRev =
+            syncHistoryRows.find((r) => String(r.contentHash) === currentHash) ??
+            syncHistoryRows[syncHistoryRows.length - 1];
+          const syncRevId = String(matchingRev?.id ?? '');
+          const republished = asRecord(
+            await client.republishArtifact(googleArtifactId, {
+              approvedCandidateId: approvedSyncCandidateId,
+              sourceMemoryIds: [approvedSyncMemId],
+              sourceRevisionIds: [syncRevId],
+            }),
+          );
+          record(
+            'republish-governance',
+            String(asRecord(republished.artifact).syncStatus) === 'REPUBLISHED',
+            `status=${String(asRecord(republished.artifact).syncStatus)}`,
+          );
+        } else {
+          record('republish-governance', false, 'could not approve sync candidate');
+        }
+      }
+    }
+
+    // Relational integrity FKs required by db:verify.
+    {
+      const verify = spawnSync(
+        'pnpm.cmd',
+        ['--filter', '@questoros-memory/database', 'db:verify'],
+        {
+          cwd: process.cwd(),
+          encoding: 'utf8',
+          shell: true,
+          env: process.env,
+        },
+      );
+      record(
+        'fk-verification',
+        verify.status === 0,
+        verify.status === 0
+          ? 'db:verify ok'
+          : (verify.stderr || verify.stdout || 'db:verify failed').slice(0, 200),
+      );
+    }
+
+    // Recovery script must refuse without safety gates.
+    {
+      const recoveryEnv = { ...process.env };
+      delete recoveryEnv.RUN_PHASE5_MIGRATION_RECOVERY;
+      delete recoveryEnv.PHASE5_RECOVERY_EXPECTED_CLUSTER;
+      delete recoveryEnv.PHASE5_RECOVERY_CONFIRM;
+      recoveryEnv.CI = 'false';
+      recoveryEnv.GITHUB_ACTIONS = 'false';
+      const recovery = spawnSync(
+        process.execPath,
+        [path.resolve(process.cwd(), 'packages/database/scripts/recover-phase5-migration.mjs')],
+        {
+          cwd: process.cwd(),
+          encoding: 'utf8',
+          env: recoveryEnv,
+        },
+      );
+      record(
+        'recovery-script-gate',
+        recovery.status !== 0 &&
+          /gated|Recovery already completed|RUN_PHASE5_MIGRATION_RECOVERY/i.test(
+            `${recovery.stderr}\n${recovery.stdout}`,
+          ),
+        `exit=${recovery.status}`,
+      );
+    }
 
     const otherClient = new MemoryApiClient({ baseUrl, apiKey: secondApiKeyRaw! });
     try {
