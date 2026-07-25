@@ -1,68 +1,106 @@
-/**
- * QuestorOS Memory — private staging CDK app (PREPARE ONLY).
- *
- * Deployment region: ap-southeast-1
- * Bedrock runtime region: us-west-2
- *
- * Do not deploy without an explicit cost and teardown approval.
- */
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
+import { Construct } from 'constructs';
 
 const DEPLOYMENT_REGION = 'ap-southeast-1';
 const BEDROCK_REGION = 'us-west-2';
-const TITAN_MODEL_ARN = 'arn:aws:bedrock:us-west-2::foundation-model/amazon.titan-embed-text-v2:0';
+const DATABASE_SECRET_NAME = 'questoros-memory/staging/database-url';
+const TITAN_MODEL_ARN =
+  'arn:aws:bedrock:us-west-2::foundation-model/amazon.titan-embed-text-v2:0';
+const PARAMETERS_SECRETS_EXTENSION_PARAMETER =
+  '/aws/service/aws-parameters-and-secrets-lambda-extension/x86/latest';
 
+const sourceDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(sourceDir, '..', '..', '..');
+
+/**
+ * QuestorOS Memory staging infrastructure.
+ *
+ * This stack is synthesis-ready but deployment remains blocked until explicit
+ * cost, budget, secret-provisioning, and teardown approval.
+ */
 export class QuestorosMemoryStagingStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     cdk.Tags.of(this).add('project', 'questoros-memory');
     cdk.Tags.of(this).add('environment', 'staging');
-    cdk.Tags.of(this).add('phase', '4');
+    cdk.Tags.of(this).add('phase', '6');
     cdk.Tags.of(this).add('manager', 'questoros');
 
-    const dbSecret = new secretsmanager.Secret(this, 'MemoryDatabaseSecret', {
-      description: 'CockroachDB URL for QuestorOS Memory staging (value set out-of-band)',
-      secretName: 'questoros-memory/staging/database-url',
-    });
+    const dbSecret = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      'MemoryDatabaseSecret',
+      DATABASE_SECRET_NAME,
+    );
 
-    const apiKeySecret = new secretsmanager.Secret(this, 'MemoryApiKeySecret', {
-      description: 'Bootstrap Memory API key material (value set out-of-band)',
-      secretName: 'questoros-memory/staging/api-key',
-    });
+    const extensionLayerArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      PARAMETERS_SECRETS_EXTENSION_PARAMETER,
+    );
+    const extensionLayer = lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      'ParametersAndSecretsExtension',
+      extensionLayerArn,
+    );
 
-    const fn = new lambda.Function(this, 'MemoryApiFunction', {
+    const fn = new nodejs.NodejsFunction(this, 'MemoryApiFunction', {
+      functionName: 'questoros-memory-staging-api',
+      description: 'QuestorOS Memory staging REST API',
       runtime: lambda.Runtime.NODEJS_24_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromInline(
-        'exports.handler = async () => ({ statusCode: 501, body: "Not deployed" });',
-      ),
-      memorySize: 512,
-      timeout: cdk.Duration.seconds(15),
+      architecture: lambda.Architecture.X86_64,
+      entry: path.join(repoRoot, 'services', 'memory-api', 'src', 'lambda.ts'),
+      handler: 'handler',
+      projectRoot: repoRoot,
+      depsLockFilePath: path.join(repoRoot, 'pnpm-lock.yaml'),
+      bundling: {
+        target: 'node24',
+        format: nodejs.OutputFormat.CJS,
+        minify: false,
+        sourceMap: true,
+        sourcesContent: false,
+        forceDockerBundling: true,
+        externalModules: ['@prisma/client'],
+        commandHooks: {
+          beforeBundling: () => [],
+          beforeInstall: () => [],
+          afterBundling: (inputDir, outputDir) => [
+            `node "${inputDir}/infra/aws-cdk/scripts/copy-prisma-runtime.mjs" "${inputDir}" "${outputDir}"`,
+          ],
+        },
+      },
+      layers: [extensionLayer],
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(30),
       reservedConcurrentExecutions: 5,
       environment: {
+        NODE_ENV: 'production',
+        NODE_OPTIONS: '--enable-source-maps',
+        LOG_LEVEL: 'info',
         EMBEDDING_PROVIDER: 'amazon-bedrock',
         EMBEDDING_MODEL_ID: 'amazon.titan-embed-text-v2:0',
         EMBEDDING_DIMENSIONS: '1024',
         EMBEDDING_NORMALIZE: 'true',
         AWS_BEDROCK_REGION: BEDROCK_REGION,
         EMBEDDING_AUTO_ON_WRITE: 'false',
-        DATABASE_SECRET_ARN: dbSecret.secretArn,
-        API_KEY_SECRET_ARN: apiKeySecret.secretArn,
+        DATABASE_SECRET_ID: dbSecret.secretArn,
+        PARAMETERS_SECRETS_EXTENSION_HTTP_PORT: '2773',
+        SECRETS_MANAGER_TTL: '300',
+        PARAMETERS_SECRETS_EXTENSION_LOG_LEVEL: 'WARN',
       },
       logRetention: logs.RetentionDays.TWO_WEEKS,
     });
 
     dbSecret.grantRead(fn);
-    apiKeySecret.grantRead(fn);
-
     fn.addToRolePolicy(
       new iam.PolicyStatement({
         sid: 'InvokeTitanTextEmbeddingsV2',
@@ -73,12 +111,15 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
 
     const httpApi = new apigwv2.HttpApi(this, 'MemoryHttpApi', {
       apiName: 'questoros-memory-staging',
-      description: 'Private staging Memory API (no permissive CORS)',
+      description: 'QuestorOS Memory staging API with application bearer authentication',
       corsPreflight: undefined,
       createDefaultStage: false,
     });
 
-    const integration = new integrations.HttpLambdaIntegration('MemoryLambdaIntegration', fn);
+    const integration = new integrations.HttpLambdaIntegration(
+      'MemoryLambdaIntegration',
+      fn,
+    );
     httpApi.addRoutes({
       path: '/{proxy+}',
       methods: [apigwv2.HttpMethod.ANY],
@@ -100,17 +141,24 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
       },
     });
 
-    new cdk.CfnOutput(this, 'DeploymentRegion', { value: DEPLOYMENT_REGION });
+    new cdk.CfnOutput(this, 'DeploymentRegion', {
+      value: DEPLOYMENT_REGION,
+    });
     new cdk.CfnOutput(this, 'BedrockRegion', { value: BEDROCK_REGION });
     new cdk.CfnOutput(this, 'HttpApiId', { value: httpApi.apiId });
-    // Intentionally no secret values in outputs.
+    new cdk.CfnOutput(this, 'StagingApiUrl', {
+      value: `${httpApi.apiEndpoint}/staging`,
+    });
   }
 }
 
-const app = new cdk.App();
+const app = new cdk.App({
+  outdir: process.env.CDK_OUTDIR ?? path.join(repoRoot, 'infra', 'aws-cdk', 'cdk.out'),
+});
 new QuestorosMemoryStagingStack(app, 'QuestorosMemoryStaging', {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: DEPLOYMENT_REGION,
   },
 });
+app.synth();
