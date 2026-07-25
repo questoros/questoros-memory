@@ -14,6 +14,7 @@ const mockCorrect = vi.fn();
 const mockDelete = vi.fn();
 const mockHistory = vi.fn();
 const mockEmbed = vi.fn();
+const mockGenerate = vi.fn();
 
 vi.mock('@questoros-memory/memory-service', () => ({
   transportWhoami: (...args: unknown[]) => mockWhoami(...args),
@@ -25,6 +26,7 @@ vi.mock('@questoros-memory/memory-service', () => ({
   transportDeleteMemory: (...args: unknown[]) => mockDelete(...args),
   transportRevisionHistory: (...args: unknown[]) => mockHistory(...args),
   transportUpsertEmbedding: (...args: unknown[]) => mockEmbed(...args),
+  transportGenerateEmbedding: (...args: unknown[]) => mockGenerate(...args),
 }));
 
 type ToolRegistration = {
@@ -63,8 +65,8 @@ function createMockServer() {
 }
 
 describe('MCP_TOOL_NAMES', () => {
-  it('exports exactly nine stable tool names', () => {
-    expect(MCP_TOOL_NAMES).toHaveLength(9);
+  it('exports exactly ten stable tool names', () => {
+    expect(MCP_TOOL_NAMES).toHaveLength(10);
     expect(MCP_TOOL_NAMES).toEqual([
       'questoros_memory_whoami',
       'questoros_memory_create',
@@ -75,6 +77,7 @@ describe('MCP_TOOL_NAMES', () => {
       'questoros_memory_delete',
       'questoros_memory_history',
       'questoros_memory_set_embedding',
+      'questoros_memory_generate_embedding',
     ]);
   });
 });
@@ -191,6 +194,24 @@ describe('registerTools', () => {
       embedding: Array.from({ length: 1024 }, () => 0.01),
     });
     expect(mockEmbed).toHaveBeenCalled();
+
+    mockGenerate.mockResolvedValueOnce({
+      memoryId: MEMORY_ID,
+      provider: 'amazon-bedrock',
+      modelId: 'amazon.titan-embed-text-v2:0',
+      dimensions: 1024,
+      normalized: true,
+      inputTokenCount: 3,
+      generated: true,
+      reused: false,
+    });
+    const generated = await tools.get('questoros_memory_generate_embedding')!.handler({
+      memoryId: MEMORY_ID,
+      force: false,
+    });
+    expect(mockGenerate).toHaveBeenCalledWith(API_KEY, MEMORY_ID, { force: false });
+    expect(generated.content[0].text).toContain('"generated": true');
+    expect(generated.content[0].text).not.toContain('embedding');
   });
 
   it('returns list and get success payloads', async () => {

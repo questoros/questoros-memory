@@ -1,0 +1,21 @@
+{
+  "name": "@questoros-memory/aws-cdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AWS CDK staging infrastructure for QuestorOS Memory (prepare only; do not deploy without approval)",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "synth": "tsc --noEmit -p tsconfig.json && node -e \"console.log('CDK typecheck-only validation passed. CloudFormation synth/deploy remain blocked until approval.')\"",
+    "deploy": "node -e \"console.error('Deployment is blocked until explicit approval.'); process.exit(1)\"",
+    "teardown": "node -e \"console.log('No resources are deployed yet. Use cdk destroy only after an approved deployment.')\""
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.200.0",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}

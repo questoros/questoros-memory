@@ -10,6 +10,10 @@ export default defineConfig({
         __dirname,
         'packages/memory-service/src/index.ts',
       ),
+      '@questoros-memory/embedding-provider': path.resolve(
+        __dirname,
+        'packages/embedding-provider/src/index.ts',
+      ),
       '@questoros-memory/shared': path.resolve(__dirname, 'packages/shared/src/index.ts'),
     },
   },

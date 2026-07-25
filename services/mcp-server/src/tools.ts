@@ -9,6 +9,7 @@ import {
   deleteMemoryToolShape,
   historyMemoryToolShape,
   setEmbeddingToolShape,
+  generateEmbeddingToolShape,
 } from '@questoros-memory/memory-core';
 import {
   transportWhoami,
@@ -20,6 +21,7 @@ import {
   transportDeleteMemory,
   transportRevisionHistory,
   transportUpsertEmbedding,
+  transportGenerateEmbedding,
 } from '@questoros-memory/memory-service';
 
 function formatError(error: unknown): string {
@@ -200,6 +202,22 @@ export function registerTools(server: McpServer, apiKey: string): void {
       }
     },
   );
+
+  server.tool(
+    'questoros_memory_generate_embedding',
+    'Generates and persists a Titan Text Embeddings V2 vector for a memory. Returns metadata only, never the vector. Changes data.',
+    generateEmbeddingToolShape,
+    async (input) => {
+      try {
+        const result = await transportGenerateEmbedding(apiKey, input.memoryId, {
+          force: input.force ?? false,
+        });
+        return jsonResult(result);
+      } catch (error) {
+        return { content: [{ type: 'text', text: formatError(error) }], isError: true };
+      }
+    },
+  );
 }
 
 export const MCP_TOOL_NAMES = [
@@ -212,4 +230,5 @@ export const MCP_TOOL_NAMES = [
   'questoros_memory_delete',
   'questoros_memory_history',
   'questoros_memory_set_embedding',
+  'questoros_memory_generate_embedding',
 ] as const;

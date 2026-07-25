@@ -33,6 +33,12 @@ export type {
   WhoamiResult,
 } from './operations.js';
 export {
+  generateEmbeddingForMemory,
+  maybeAutoGenerateEmbedding,
+  mapEmbeddingProviderError,
+} from './embeddings.js';
+export type { GenerateEmbeddingOptions } from './embeddings.js';
+export {
   transportWhoami,
   transportCreateMemory,
   transportGetMemory,
@@ -42,5 +48,6 @@ export {
   transportDeleteMemory,
   transportRevisionHistory,
   transportUpsertEmbedding,
+  transportGenerateEmbedding,
   transportReadyz,
 } from './transport.js';

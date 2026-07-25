@@ -1,21 +1,19 @@
 {
-  "name": "@questoros-memory/memory-service",
+  "name": "@questoros-memory/embedding-provider",
   "version": "0.1.0",
   "private": true,
-  "description": "Memory lifecycle operations, authentication, authorization, scope enforcement, and explainable search",
+  "description": "Provider-neutral embedding contract and Amazon Titan Text Embeddings V2 implementation",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . --max-warnings=0",
-    "test": "vitest run"
+    "test": "vitest run",
+    "live-preflight": "node ./scripts/live-preflight.mjs"
   },
   "dependencies": {
-    "@prisma/client": "^6.7.0",
-    "@questoros-memory/memory-core": "workspace:*",
-    "@questoros-memory/database": "workspace:*",
-    "@questoros-memory/embedding-provider": "workspace:*"
+    "@aws-sdk/client-bedrock-runtime": "^3.830.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -13,6 +13,7 @@ export {
   getRevisions,
   getMaxRevisionNumber,
   upsertEmbedding,
+  hasEmbedding,
   deleteEmbeddingsForMemory,
   searchByVector,
   searchByText,

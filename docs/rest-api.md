@@ -218,6 +218,33 @@ Upserts a 1024-dimension embedding vector.
 { "status": "ok" }
 ```
 
+### `POST /v1/memories/:memoryId/embedding/generate`
+
+Generates and persists a Titan Text Embeddings V2 embedding for the memory content.
+
+Permission: `memory:embed`
+
+```json
+{ "force": false }
+```
+
+**Response `200`** (metadata only; never the vector):
+
+```json
+{
+  "memoryId": "66666666-6666-4666-8666-666666666666",
+  "provider": "amazon-bedrock",
+  "modelId": "amazon.titan-embed-text-v2:0",
+  "dimensions": 1024,
+  "normalized": true,
+  "inputTokenCount": 12,
+  "generated": true,
+  "reused": false
+}
+```
+
+When an embedding already exists for the configured model/dimensions and `force` is false, the existing row is reused without calling Bedrock.
+
 ## Structured errors
 
 All error responses use this shape:
