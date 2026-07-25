@@ -1,24 +1,65 @@
-# QuestorOS Memory — AWS CDK staging (Phase 4)
+# QuestorOS Memory — AWS staging
 
-**Status:** Prepared only. **Do not deploy** without explicit cost and teardown approval.
+**Status:** Phase 6 packaging and synthesis only. **Do not deploy** without explicit cost, budget, secret-provisioning, and teardown approval.
 
 ## Topology
 
 ```text
 API Gateway HTTP API (ap-southeast-1)
-  → Lambda Node.js 24 (ap-southeast-1)
+  → Lambda Node.js 24 + Fastify Memory API (ap-southeast-1)
+  → AWS Parameters and Secrets Lambda Extension
   → CockroachDB Cloud (Singapore)
   → Bedrock Runtime (us-west-2) Titan Text Embeddings V2
 ```
 
+The previous inline `501 Not deployed` Lambda placeholder has been replaced by the real Memory API handler. The deployment package includes the generated Prisma client and the `rhel-openssl-3.0.x` query engine required by the Amazon Linux 2023 Lambda runtime.
+
 ## Regions
 
-| Concern                | Region           |
-| ---------------------- | ---------------- |
+| Concern | Region |
+| --- | --- |
 | Application deployment | `ap-southeast-1` |
-| Bedrock InvokeModel    | `us-west-2`      |
+| CockroachDB cluster | Singapore |
+| Bedrock InvokeModel | `us-west-2` |
 
-Titan Text Embeddings V2 supports in-region invocation in multiple AWS Regions, including at least `us-east-1`, `us-east-2`, and `us-west-2`. Phase 4 selects `us-west-2` for Bedrock calls and does not invoke the model from `ap-southeast-1`. Keep application and Bedrock regions as separate settings.
+Application and Bedrock regions remain separate settings.
+
+## Database secret
+
+The stack imports, but does not create or delete, this secret:
+
+```text
+questoros-memory/staging/database-url
+```
+
+The value may be either the raw CockroachDB PostgreSQL URL or JSON:
+
+```json
+{
+  "DATABASE_URL": "postgresql://..."
+}
+```
+
+At invocation time, the AWS Parameters and Secrets Lambda Extension retrieves and caches the value. The Lambda function receives only the secret ARN in `DATABASE_SECRET_ID`; the database URL is not embedded in CloudFormation, CDK outputs, source control, or logs.
+
+Before an approved deployment, the secret must be created out-of-band with the existing private `DATABASE_URL`. Never paste the value into an issue, PR, command transcript, or chat.
+
+## Package verification
+
+```powershell
+pnpm.cmd --filter @questoros-memory/aws-cdk synth
+```
+
+This command does **not** deploy. It:
+
+1. builds the monorepo;
+2. generates Prisma for both the development host and Lambda Amazon Linux target;
+3. bundles the real API with CDK `NodejsFunction`;
+4. copies the Prisma runtime into the Lambda asset;
+5. synthesizes CloudFormation;
+6. verifies the handler, runtime, secret reference, package size, and absence of inline placeholder or obvious secret material.
+
+The command requires Docker because bundling is forced into a Lambda-compatible build environment.
 
 ## Least-privilege Bedrock policy
 
@@ -40,28 +81,43 @@ Do not grant `bedrock:*`, AdministratorAccess, PowerUserAccess, streaming invoca
 
 ## Safety controls
 
-- `EMBEDDING_AUTO_ON_WRITE=false` by default
+- `EMBEDDING_AUTO_ON_WRITE=false`
 - no historical backfill
-- no batch job / provisioned throughput / Priority tier
+- no batch jobs or provisioned throughput
 - Lambda reserved concurrency: 5
-- API Gateway stage throttling: 20 rps / burst 40
+- API Gateway stage throttling: 20 requests/second, burst 40
+- Lambda timeout: 30 seconds
+- Lambda memory: 1,024 MB
 - CloudWatch log retention: 14 days
-- Secrets from AWS Secrets Manager (never CloudFormation outputs)
-- tags: `project`, `environment`, `phase`, `manager`
-- stdio MCP is not deployed; remote Streamable HTTP MCP requires a later security checkpoint
+- application logs redact authorization headers, API keys, tokens, and `DATABASE_URL`
+- database secret read permission limited to the imported staging secret
+- AWS Parameters and Secrets extension cache TTL: 300 seconds
+- no permissive CORS
+- remote MCP is not deployed
 
-## Cost and teardown
+## Deployment gate
 
-Before any deploy, publish:
-
-1. estimated monthly cost for Lambda + API Gateway + Secrets Manager + CloudWatch + Bedrock invocations
-2. AWS Budget alert documentation
-3. teardown command (`cdk destroy` for this stack only)
-
-Until approval:
+The deployment command remains intentionally blocked:
 
 ```powershell
 pnpm.cmd --filter @questoros-memory/aws-cdk deploy
 ```
 
-must remain blocked.
+Before unblocking it, Phase 6 must publish and approve:
+
+1. a monthly cost estimate;
+2. an AWS Budget alert plan;
+3. the exact secret-creation procedure without displaying its value;
+4. the exact stack-only teardown command;
+5. post-deployment smoke tests;
+6. confirmation that the endpoint will contain synthetic staging data only.
+
+Current boundaries:
+
+```text
+AWS resources created: none
+Public endpoint: none
+Live Bedrock calls during Phase 6 packaging: none
+Live Google/Microsoft calls: none
+Production changes: none
+```
