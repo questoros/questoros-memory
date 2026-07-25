@@ -462,6 +462,25 @@ export const upsertEmbeddingResponseSchema = z
   })
   .strict();
 
+export const generateEmbeddingRequestSchema = z
+  .object({
+    force: z.boolean().default(false),
+  })
+  .strict();
+
+export const generateEmbeddingResponseSchema = z
+  .object({
+    memoryId: uuidSchema,
+    provider: z.literal('amazon-bedrock'),
+    modelId: embeddingModelSchema,
+    dimensions: z.literal(EMBEDDING_DIMENSIONS),
+    normalized: z.literal(true),
+    inputTokenCount: z.number().int().nullable(),
+    generated: z.boolean(),
+    reused: z.boolean(),
+  })
+  .strict();
+
 export const errorBodySchema = z
   .object({
     error: z
@@ -574,6 +593,11 @@ export const setEmbeddingToolShape = {
   modelVersion: z.string().optional(),
 } as const;
 
+export const generateEmbeddingToolShape = {
+  memoryId: uuidSchema,
+  force: z.boolean().optional(),
+} as const;
+
 // ── Inferred types ─────────────────────────────────────────────
 
 export type CreateMemoryRequest = z.infer<typeof createMemoryRequestSchema>;
@@ -581,6 +605,8 @@ export type CorrectMemoryRequest = z.infer<typeof correctMemoryRequestSchema>;
 export type SearchMemoryRequest = z.infer<typeof searchMemoryRequestSchema>;
 export type ListMemoriesQuery = z.infer<typeof listMemoriesQuerySchema>;
 export type UpsertEmbeddingRequest = z.infer<typeof upsertEmbeddingRequestSchema>;
+export type GenerateEmbeddingRequest = z.infer<typeof generateEmbeddingRequestSchema>;
+export type GenerateEmbeddingResponse = z.infer<typeof generateEmbeddingResponseSchema>;
 export type WhoamiResponse = z.infer<typeof whoamiResponseSchema>;
 export type MemoryRecord = z.infer<typeof memoryRecordSchema>;
 export type MemoryRevision = z.infer<typeof memoryRevisionSchema>;

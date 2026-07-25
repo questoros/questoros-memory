@@ -21,6 +21,7 @@ import {
   type CorrectMemoryInput,
   type UpsertEmbeddingInput,
 } from './operations.js';
+import { generateEmbeddingForMemory } from './embeddings.js';
 
 async function withAuth(token: string | undefined): Promise<{
   auth: AuthContext;
@@ -109,6 +110,23 @@ export async function transportUpsertEmbedding(
     requestId,
   );
   return { status: 'ok' as const };
+}
+
+export async function transportGenerateEmbedding(
+  token: string | undefined,
+  memoryId: string,
+  body: unknown,
+  requestId?: string,
+) {
+  const { auth } = await withAuth(token);
+  const force =
+    body && typeof body === 'object' && 'force' in body
+      ? Boolean((body as { force?: unknown }).force)
+      : false;
+  return generateEmbeddingForMemory(getDatabaseClient(), auth, memoryId, {
+    force,
+    requestId,
+  });
 }
 
 /** Health helpers used by REST — not business logic. */

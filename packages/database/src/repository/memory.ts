@@ -551,6 +551,26 @@ export async function getMaxRevisionNumber(
 
 // ── Embedding operations ───────────────────────────────────────
 
+export async function hasEmbedding(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  tenantId: string,
+  memoryId: string,
+  embeddingModel: string,
+  embeddingDimensions: number,
+): Promise<boolean> {
+  const rows = await prisma.$queryRaw<{ exists: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1
+      FROM memory_embeddings
+      WHERE tenant_id = ${tenantId}::uuid
+        AND memory_id = ${memoryId}::uuid
+        AND embedding_model = ${embeddingModel}
+        AND embedding_dimensions = ${embeddingDimensions}
+    ) AS exists
+  `;
+  return Boolean(rows[0]?.exists);
+}
+
 export async function upsertEmbedding(
   tx: Prisma.TransactionClient,
   input: {

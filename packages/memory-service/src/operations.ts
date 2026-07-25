@@ -37,6 +37,7 @@ import { normalizeContent, hashContent, validateMetadata, validateEmbedding } fr
 import { resolveRequestedScope, enforceScope, enforceMemoryScope } from './scope.js';
 import type { RequestedScope } from './scope.js';
 import * as repo from '@questoros-memory/database';
+import { maybeAutoGenerateEmbedding } from './embeddings.js';
 
 const DEFAULT_SENSITIVITY: SensitivityValue = 'STANDARD';
 
@@ -101,7 +102,7 @@ export async function createMemory(
         : new Date(input.validUntil);
   const scopeId = getScopeId(requestedScope, auth.tenantId);
 
-  return await withTransaction(
+  const result = await withTransaction(
     prisma,
     async (tx) => {
       const existing = await repo.findActiveMemoryByContentHash(
@@ -180,6 +181,13 @@ export async function createMemory(
     },
     'createMemory',
   );
+
+  // Auto-embed only when no caller-supplied embedding was persisted.
+  if (!input.embedding) {
+    await maybeAutoGenerateEmbedding(prisma, auth, result.memory.id, requestId);
+  }
+
+  return result;
 }
 
 // ── Get Memory ─────────────────────────────────────────────────
@@ -357,7 +365,7 @@ export async function correctMemory(
   const input = parseContract(correctMemoryRequestSchema, normalizeDates(rawInput));
   await assertRelatedMemoriesAccessible(prisma, auth, collectRelatedMemoryIds(input));
 
-  return await withTransaction(
+  const result = await withTransaction(
     prisma,
     async (tx) => {
       const memory = await repo.getMemory(tx, auth.tenantId, memoryId);
@@ -449,6 +457,10 @@ export async function correctMemory(
     },
     'correctMemory',
   );
+
+  await maybeAutoGenerateEmbedding(prisma, auth, memoryId, requestId);
+
+  return result;
 }
 
 // ── Soft Delete Memory ─────────────────────────────────────────
