@@ -1,3 +1,4 @@
+# Temporary workflow; remove after it commits the formatted Phase 6 files.
 name: Phase 6 one-time format
 
 on:
