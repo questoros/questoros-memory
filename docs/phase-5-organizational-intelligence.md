@@ -133,3 +133,19 @@ Organizational-intelligence logic never imports Google- or Microsoft-specific pa
 6. **Continuity Agent session (no chat history)** — model-directed tool selection recalls August 20, executes next task, stores artifact/checkpoint/outcome/lesson
 
 The Memory API and Continuity Agent remain independently deployable.
+
+---
+
+## Phase 5C acceptance status
+
+Gated harness: `pnpm acceptance:phase5` (`RUN_PHASE5_ACCEPTANCE=true` + `DATABASE_URL`).
+
+Proven against the real CockroachDB development database, in-process REST API, and public SDK:
+
+- Harborview synthetic harvest → governed candidates → approve correction / reject private
+- Context package + intelligence brief
+- Fake Google Drive, OneDrive, and SharePoint publish + `SYNC_CONFLICT` (no live Drive/Microsoft calls)
+- New Continuity Agent session (empty chat history) recalls August 20, respects no-paid-advertising, writes Markdown artifact, persists checkpoint / outcome / lesson
+- Cross-tenant isolation + full teardown of acceptance-scoped rows
+
+Live model, Google, Microsoft, and AWS deploy: **none**. Draft PR #6 remains unmerged.
