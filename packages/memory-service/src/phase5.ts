@@ -1512,6 +1512,10 @@ export async function republishArtifact(
 
   // External side effect must run exactly once — never inside withTransaction/withRetry.
   const externalFileId = row.externalFileId;
+  const syncDirection = row.syncDirection as
+    'EXPORT_ONLY' | 'IMPORT_ONLY' | 'BIDIRECTIONAL_REVIEWED';
+  const syncStatus = row.syncStatus as
+    'PENDING' | 'PUBLISHED' | 'EXTERNAL_CHANGED' | 'SYNC_CONFLICT' | 'REPUBLISHED' | 'FAILED';
   const republished = await drive.republish(
     {
       provider: row.provider,
@@ -1527,8 +1531,8 @@ export async function republishArtifact(
       publishedBy: row.actorId ?? auth.actorId,
       lastExternalModifiedAt: row.lastExternalModifiedAt?.toISOString() ?? null,
       lastSyncedContentHash: row.lastSyncedContentHash,
-      syncDirection: row.syncDirection,
-      syncStatus: row.syncStatus,
+      syncDirection,
+      syncStatus,
       title: row.title,
     },
     publishedContent,
