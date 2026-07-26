@@ -2,13 +2,15 @@
   "name": "@questoros-memory/aws-cdk",
   "version": "0.1.0",
   "private": true,
-  "description": "AWS CDK staging infrastructure for QuestorOS Memory (prepare only; do not deploy without approval)",
+  "description": "AWS CDK staging infrastructure for the deployed QuestorOS Memory API; manual deploy and teardown require explicit approval",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "synth": "tsc --noEmit -p tsconfig.json && node -e \"console.log('CDK typecheck-only validation passed. CloudFormation synth/deploy remain blocked until approval.')\"",
-    "deploy": "node -e \"console.error('Deployment is blocked until explicit approval.'); process.exit(1)\"",
-    "teardown": "node -e \"console.log('No resources are deployed yet. Use cdk destroy only after an approved deployment.')\""
+    "synth": "node scripts/synth.mjs",
+    "synth:verify": "node scripts/verify-assembly.mjs",
+    "smoke:staging": "node scripts/staging-smoke.mjs",
+    "deploy": "node -e \"console.error('Deployment is blocked until explicit approval. Use the reviewed command in docs/phase-6-aws-cost-and-teardown.md.'); process.exit(1)\"",
+    "teardown": "node -e \"console.error('Teardown is blocked until explicit approval. Use the reviewed stack-only command in docs/phase-6-aws-cost-and-teardown.md.'); process.exit(1)\""
   },
   "dependencies": {
     "aws-cdk-lib": "^2.200.0",

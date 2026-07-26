@@ -1,24 +1,71 @@
-# QuestorOS Memory — AWS CDK staging (Phase 4)
+# QuestorOS Memory — AWS staging
 
-**Status:** Prepared only. **Do not deploy** without explicit cost and teardown approval.
+**Status:** Phase 6 staging is deployed in `ap-southeast-1` after successful live smoke, teardown, restoration, and final smoke validation. Production and remote MCP remain undeployed.
+
+Additional environments, broader permissions, higher spend, live model activation, or production deployment still require explicit approval.
 
 ## Topology
 
 ```text
 API Gateway HTTP API (ap-southeast-1)
-  → Lambda Node.js 24 (ap-southeast-1)
+  → Lambda Node.js 24 + Fastify Memory API (ap-southeast-1)
+  → AWS Parameters and Secrets Lambda Extension
   → CockroachDB Cloud (Singapore)
   → Bedrock Runtime (us-west-2) Titan Text Embeddings V2
 ```
+
+The previous inline `501 Not deployed` Lambda placeholder has been replaced by the real Memory API handler. The deployment package includes the generated Prisma client and the `rhel-openssl-3.0.x` query engine required by the Amazon Linux 2023 Lambda runtime.
 
 ## Regions
 
 | Concern                | Region           |
 | ---------------------- | ---------------- |
 | Application deployment | `ap-southeast-1` |
+| CockroachDB cluster    | Singapore        |
 | Bedrock InvokeModel    | `us-west-2`      |
 
-Titan Text Embeddings V2 supports in-region invocation in multiple AWS Regions, including at least `us-east-1`, `us-east-2`, and `us-west-2`. Phase 4 selects `us-west-2` for Bedrock calls and does not invoke the model from `ap-southeast-1`. Keep application and Bedrock regions as separate settings.
+Application and Bedrock regions remain separate settings. Phase 6 did not invoke Bedrock.
+
+## Database secret
+
+The stack imports, but does not create or delete, this secret:
+
+```text
+questoros-memory/staging/database-url
+```
+
+The secret targets the CockroachDB database `questoros_memory`. Its value may be either the raw PostgreSQL URL or JSON:
+
+```json
+{
+  "DATABASE_URL": "postgresql://..."
+}
+```
+
+At invocation time, the AWS Parameters and Secrets Lambda Extension retrieves and caches the value. The Lambda function receives only the secret ARN in `DATABASE_SECRET_ID`; the database URL is not embedded in CloudFormation, CDK outputs, source control, or logs.
+
+Never paste the value into an issue, pull request, command transcript, or chat.
+
+## Package verification
+
+```powershell
+pnpm.cmd --filter @questoros-memory/aws-cdk synth
+```
+
+This command does **not** deploy. It:
+
+1. builds the monorepo;
+2. generates Prisma for both the development host and Lambda Amazon Linux target;
+3. bundles the real API with CDK `NodejsFunction`;
+4. copies the Prisma runtime into the Lambda asset;
+5. synthesizes CloudFormation;
+6. verifies the real handler and Lambda package size;
+7. verifies the Lambda runtime, memory, timeout, and reduced-quota-safe concurrency configuration;
+8. verifies the explicit 14-day log group and stack-scoped deletion policy;
+9. verifies five actionless CloudWatch alarms and API Gateway throttling;
+10. verifies that no inline placeholder or obvious secret material is present.
+
+The command requires Docker because bundling is forced into a Lambda-compatible build environment.
 
 ## Least-privilege Bedrock policy
 
@@ -38,30 +85,71 @@ Titan Text Embeddings V2 supports in-region invocation in multiple AWS Regions, 
 
 Do not grant `bedrock:*`, AdministratorAccess, PowerUserAccess, streaming invocation, provisioned throughput, or batch jobs.
 
-## Safety controls
+## Safety and observability controls
 
-- `EMBEDDING_AUTO_ON_WRITE=false` by default
+- `EMBEDDING_AUTO_ON_WRITE=false`
 - no historical backfill
-- no batch job / provisioned throughput / Priority tier
-- Lambda reserved concurrency: 5
-- API Gateway stage throttling: 20 rps / burst 40
+- no batch jobs or provisioned throughput
+- Lambda reserved concurrency intentionally unset for the reduced-quota staging account
+- API Gateway stage throttling: 20 requests/second, burst 40
+- $5 monthly AWS Budget with actual and forecast alerts
+- Lambda timeout: 30 seconds
+- Lambda memory: 1,024 MB
+- explicit log group: `/questoros-memory/staging/api`
 - CloudWatch log retention: 14 days
-- Secrets from AWS Secrets Manager (never CloudFormation outputs)
-- tags: `project`, `environment`, `phase`, `manager`
-- stdio MCP is not deployed; remote Streamable HTTP MCP requires a later security checkpoint
+- staging log group removal policy: `DESTROY`
+- application logs redact authorization headers, API keys, tokens, and `DATABASE_URL`
+- database secret read permission limited to the imported staging secret
+- AWS Parameters and Secrets extension cache TTL: 300 seconds
+- no permissive CORS
+- remote MCP is not deployed
 
-## Cost and teardown
+Reserved concurrency may be added later only after the regional Lambda concurrency quota supports AWS's required unreserved pool. Until then, API Gateway throttling and budget alerts are the staging traffic and spend controls.
 
-Before any deploy, publish:
+The stack creates five standard-resolution alarms without notification actions:
 
-1. estimated monthly cost for Lambda + API Gateway + Secrets Manager + CloudWatch + Bedrock invocations
-2. AWS Budget alert documentation
-3. teardown command (`cdk destroy` for this stack only)
-
-Until approval:
-
-```powershell
-pnpm.cmd --filter @questoros-memory/aws-cdk deploy
+```text
+Lambda errors
+Lambda throttles
+Lambda p95 duration ≥ 25 seconds for two periods
+HTTP API 5xx responses
+HTTP API p95 latency ≥ 25 seconds for two periods
 ```
 
-must remain blocked.
+Notification destinations remain an explicit deployment-time decision and are never committed to the repository.
+
+## Deployment and teardown
+
+The package scripts remain intentionally blocked against accidental deployment or teardown. The reviewed manual commands, cost estimate, $5 budget, secret rules, teardown behavior, and proof results are documented in:
+
+```text
+docs/phase-6-aws-cost-and-teardown.md
+```
+
+## Read-only staging smoke test
+
+```powershell
+$env:RUN_PHASE6_STAGING_SMOKE="true"
+$env:QUESTOROS_MEMORY_STAGING_URL="https://<approved-staging-endpoint>/staging"
+$env:QUESTOROS_MEMORY_STAGING_API_KEY="<private staging key>"
+pnpm.cmd --filter @questoros-memory/aws-cdk smoke:staging
+```
+
+It checks health, database readiness, and authenticated identity only. It performs no writes, Bedrock calls, or external provider calls and prints no credentials or response bodies.
+
+## Current validated state
+
+```text
+Staging application deployment: restored and live
+Health check: passed
+Readiness check: passed
+Authenticated identity: passed
+Stack-only teardown proof: passed
+Restoration smoke proof: passed
+CDK bootstrap resources: preserved
+Private database secret: preserved
+$5 AWS Budget: preserved
+Live Bedrock calls: none
+Live Google/Microsoft calls: none
+Production changes: none
+```

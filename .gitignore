@@ -5,6 +5,8 @@ node_modules/
 dist/
 build/
 coverage/
+cdk.out/
+.generated/
 .env
 .env.*
 !.env.example
