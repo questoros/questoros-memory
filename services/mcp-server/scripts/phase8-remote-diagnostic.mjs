@@ -135,7 +135,10 @@ const reportSections = [
   smoke.stderr || '(empty)',
   '',
   '## Lambda function configuration',
-  functionConfiguration.stdout || functionConfiguration.stderr || functionConfiguration.error || '(empty)',
+  functionConfiguration.stdout ||
+    functionConfiguration.stderr ||
+    functionConfiguration.error ||
+    '(empty)',
   '',
   `## CloudWatch events since ${new Date(Number(startTime)).toISOString()}`,
   recentLogs.stdout || recentLogs.stderr || recentLogs.error || '(empty)',
