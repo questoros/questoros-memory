@@ -87,7 +87,7 @@ describe('ModelBackedHarvester', () => {
     }));
     const provider: ReasoningProvider = {
       providerName: 'amazon-bedrock',
-      modelId: 'amazon.nova-micro-v1:0',
+      modelId: 'us.amazon.nova-micro-v1:0',
       extract: async () => ({
         candidates: Array.from({ length: 5 }, (_, index) => ({
           content: `Fact ${index + 1}`,
@@ -106,7 +106,7 @@ describe('ModelBackedHarvester', () => {
         })),
         rationale: 'Synthetic live extraction.',
         provider: 'amazon-bedrock',
-        modelId: 'amazon.nova-micro-v1:0',
+        modelId: 'us.amazon.nova-micro-v1:0',
       }),
       analyze,
       evaluate,
