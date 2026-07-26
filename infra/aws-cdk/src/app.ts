@@ -17,7 +17,9 @@ const DATABASE_SECRET_NAME = 'questoros-memory/staging/database-url';
 const FUNCTION_NAME = 'questoros-memory-staging-api';
 const LOG_GROUP_NAME = '/questoros-memory/staging/api';
 const TITAN_MODEL_ARN = 'arn:aws:bedrock:us-west-2::foundation-model/amazon.titan-embed-text-v2:0';
-const NOVA_MICRO_MODEL_ARN = 'arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-micro-v1:0';
+const NOVA_MICRO_BASE_MODEL_ID = 'amazon.nova-micro-v1:0';
+const NOVA_MICRO_INFERENCE_PROFILE_ID = 'us.amazon.nova-micro-v1:0';
+const NOVA_MICRO_DESTINATION_REGIONS = ['us-east-1', 'us-east-2', 'us-west-2'] as const;
 const PARAMETERS_SECRETS_EXTENSION_PARAMETER =
   '/aws/service/aws-parameters-and-secrets-lambda-extension/x86/latest';
 
@@ -121,7 +123,7 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
         AWS_BEDROCK_REGION: BEDROCK_REGION,
         EMBEDDING_AUTO_ON_WRITE: 'false',
         REASONING_PROVIDER: 'amazon-bedrock',
-        REASONING_MODEL_ID: 'amazon.nova-micro-v1:0',
+        REASONING_MODEL_ID: NOVA_MICRO_INFERENCE_PROFILE_ID,
         REASONING_REGION: BEDROCK_REGION,
         REASONING_ALLOW_LIVE_CALLS: 'true',
         REASONING_MAX_INPUT_CHARACTERS: '24000',
@@ -134,12 +136,48 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
       },
     });
 
+    const novaInferenceProfileArn = cdk.Stack.of(this).formatArn({
+      service: 'bedrock',
+      region: BEDROCK_REGION,
+      account: this.account,
+      resource: 'inference-profile',
+      resourceName: NOVA_MICRO_INFERENCE_PROFILE_ID,
+    });
+    const novaFoundationModelArns = NOVA_MICRO_DESTINATION_REGIONS.map((region) =>
+      cdk.Stack.of(this).formatArn({
+        service: 'bedrock',
+        region,
+        account: '',
+        resource: 'foundation-model',
+        resourceName: NOVA_MICRO_BASE_MODEL_ID,
+      }),
+    );
+
     dbSecret.grantRead(fn);
     fn.addToRolePolicy(
       new iam.PolicyStatement({
-        sid: 'InvokeApprovedBedrockModels',
+        sid: 'InvokeTitanTextEmbeddingsV2',
         actions: ['bedrock:InvokeModel'],
-        resources: [TITAN_MODEL_ARN, NOVA_MICRO_MODEL_ARN],
+        resources: [TITAN_MODEL_ARN],
+      }),
+    );
+    fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'InvokeNovaMicroInferenceProfile',
+        actions: ['bedrock:InvokeModel'],
+        resources: [novaInferenceProfileArn],
+      }),
+    );
+    fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'InvokeNovaMicroThroughApprovedProfile',
+        actions: ['bedrock:InvokeModel'],
+        resources: novaFoundationModelArns,
+        conditions: {
+          StringEquals: {
+            'bedrock:InferenceProfileArn': novaInferenceProfileArn,
+          },
+        },
       }),
     );
 
