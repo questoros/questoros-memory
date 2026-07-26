@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { disconnectDatabaseClient } from '@questoros-memory/database';
+import { registerRemoteMcpRoute } from './remote-mcp.js';
 import { registerRoutes } from './routes.js';
 
 export interface AppOptions {
@@ -7,6 +8,8 @@ export interface AppOptions {
   port?: number;
   logLevel?: string;
   bodyLimit?: number;
+  remoteMcpEnabled?: boolean;
+  remoteMcpAllowedOrigins?: readonly string[];
 }
 
 export interface AppConfig {
@@ -20,8 +23,33 @@ declare module 'fastify' {
   }
 }
 
+function configuredRemoteMcpOrigins(value: string | undefined): string[] {
+  if (!value?.trim()) return [];
+
+  return value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .map((origin) => {
+      let parsed: URL;
+      try {
+        parsed = new URL(origin);
+      } catch {
+        throw new Error('REMOTE_MCP_ALLOWED_ORIGINS contains an invalid origin.');
+      }
+      if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== origin) {
+        throw new Error('REMOTE_MCP_ALLOWED_ORIGINS must contain exact HTTP or HTTPS origins.');
+      }
+      return origin;
+    });
+}
+
 export async function buildApp(options: AppOptions = {}): Promise<FastifyInstance> {
   const { host = '127.0.0.1', port = 8787, logLevel = 'info', bodyLimit = 262144 } = options;
+  const remoteMcpEnabled = options.remoteMcpEnabled ?? process.env.REMOTE_MCP_ENABLED === 'true';
+  const remoteMcpAllowedOrigins =
+    options.remoteMcpAllowedOrigins ??
+    (remoteMcpEnabled ? configuredRemoteMcpOrigins(process.env.REMOTE_MCP_ALLOWED_ORIGINS) : []);
 
   const app = Fastify({
     logger: {
@@ -97,6 +125,9 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   });
 
   registerRoutes(app);
+  if (remoteMcpEnabled) {
+    registerRemoteMcpRoute(app, { allowedOrigins: remoteMcpAllowedOrigins });
+  }
 
   return app;
 }
