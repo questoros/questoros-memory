@@ -54,8 +54,8 @@ const handlerSource = fs.readFileSync(handlerPath, 'utf8');
 if (handlerSource.includes('Not deployed') || handlerSource.includes('statusCode: 501')) {
   fail('placeholder Lambda handler remains in the deployment asset.');
 }
-if (!handlerSource.includes('amazon.nova-micro-v1:0')) {
-  fail('Amazon Nova Micro reasoning provider is missing from the Lambda asset.');
+if (!handlerSource.includes('us.amazon.nova-micro-v1:0')) {
+  fail('US Amazon Nova Micro inference profile is missing from the Lambda asset.');
 }
 if (!handlerSource.includes('untrusted source data')) {
   fail('reasoning prompt-injection boundary is missing from the Lambda asset.');
@@ -139,8 +139,8 @@ if (variables.EMBEDDING_AUTO_ON_WRITE !== 'false') {
 if (variables.REASONING_PROVIDER !== 'amazon-bedrock') {
   fail('staging reasoning provider is not amazon-bedrock.');
 }
-if (variables.REASONING_MODEL_ID !== 'amazon.nova-micro-v1:0') {
-  fail('staging reasoning model is not Amazon Nova Micro.');
+if (variables.REASONING_MODEL_ID !== 'us.amazon.nova-micro-v1:0') {
+  fail('staging reasoning model is not the US Amazon Nova Micro inference profile.');
 }
 if (variables.REASONING_REGION !== 'us-west-2') {
   fail('staging reasoning region is not us-west-2.');
@@ -160,14 +160,22 @@ if (variables.REASONING_TIMEOUT_MS !== '7000') {
 
 const iamPolicies = resourcesOfType(resources, 'AWS::IAM::Policy');
 const iamText = JSON.stringify(iamPolicies);
-if (!iamText.includes('amazon.nova-micro-v1:0')) {
-  fail('least-privilege Nova Micro IAM resource is missing.');
+if (!iamText.includes('inference-profile/us.amazon.nova-micro-v1:0')) {
+  fail('least-privilege US Nova Micro inference-profile resource is missing.');
+}
+for (const region of ['us-east-1', 'us-east-2', 'us-west-2']) {
+  if (!iamText.includes(`arn:aws:bedrock:${region}::foundation-model/amazon.nova-micro-v1:0`)) {
+    fail(`Nova Micro destination-model IAM resource is missing for ${region}.`);
+  }
+}
+if (!iamText.includes('bedrock:InferenceProfileArn')) {
+  fail('Nova Micro foundation-model access is not restricted to the approved inference profile.');
 }
 if (!iamText.includes('amazon.titan-embed-text-v2:0')) {
   fail('least-privilege Titan embedding IAM resource is missing.');
 }
 if (iamText.includes('bedrock:*') || iamText.includes('foundation-model/*')) {
-  fail('Bedrock IAM policy is broader than approved model-specific invocation.');
+  fail('Bedrock IAM policy is broader than approved profile and model-specific invocation.');
 }
 
 const logGroups = resourcesOfType(resources, 'AWS::Logs::LogGroup').filter(
@@ -226,5 +234,5 @@ if (templateText.includes('qmem_live_') || templateText.includes('postgresql://'
 }
 
 console.log(
-  `AWS assembly verified: real handler, Prisma Lambda engine, secret reference, bounded Nova Micro reasoning, model-specific IAM, explicit 14-day logs, reduced-quota-safe concurrency, five actionless alarms, ${(totalBytes / 1024 / 1024).toFixed(2)} MiB unzipped.`,
+  `AWS assembly verified: real handler, Prisma Lambda engine, secret reference, bounded US Nova Micro inference profile, profile-scoped multi-Region IAM, explicit 14-day logs, reduced-quota-safe concurrency, five actionless alarms, ${(totalBytes / 1024 / 1024).toFixed(2)} MiB unzipped.`,
 );
