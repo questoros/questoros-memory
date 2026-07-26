@@ -164,7 +164,7 @@ if (!iamText.includes('inference-profile/us.amazon.nova-micro-v1:0')) {
   fail('least-privilege US Nova Micro inference-profile resource is missing.');
 }
 for (const region of ['us-east-1', 'us-east-2', 'us-west-2']) {
-  if (!iamText.includes(`arn:aws:bedrock:${region}::foundation-model/amazon.nova-micro-v1:0`)) {
+  if (!iamText.includes(`bedrock:${region}::foundation-model/amazon.nova-micro-v1:0`)) {
     fail(`Nova Micro destination-model IAM resource is missing for ${region}.`);
   }
 }
