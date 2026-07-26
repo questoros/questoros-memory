@@ -9,7 +9,7 @@ on:
 
 jobs:
   phase7-format-sync:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/phase-7-live-bedrock-reasoning'
+    if: github.event_name == 'pull_request' && github.head_ref == 'feat/phase-7-live-bedrock-reasoning'
     permissions:
       contents: write
     runs-on: ubuntu-latest
