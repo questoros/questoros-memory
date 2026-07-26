@@ -27,6 +27,7 @@ export type RemoteMcpHandlerOptions = {
 export type RemoteMcpRequestHandler = (
   request: IncomingMessage,
   response: ServerResponse,
+  parsedBody?: unknown,
 ) => Promise<void>;
 
 function requestPath(request: IncomingMessage): string {
@@ -121,6 +122,10 @@ function originAllowed(request: IncomingMessage, allowedOrigins: readonly string
  * A fresh server and transport are created per request to avoid in-memory
  * session affinity and to keep the handler compatible with horizontally scaled
  * or serverless staging deployments.
+ *
+ * Framework adapters that parse JSON before dispatch may pass parsedBody. The
+ * plain Node listener leaves it undefined so the MCP transport reads the body
+ * from the incoming stream itself.
  */
 export function createRemoteMcpRequestHandler(
   options: RemoteMcpHandlerOptions = {},
@@ -128,7 +133,7 @@ export function createRemoteMcpRequestHandler(
   const routePath = options.routePath ?? DEFAULT_ROUTE;
   const allowedOrigins = options.allowedOrigins ?? [];
 
-  return async (request, response) => {
+  return async (request, response, parsedBody) => {
     const requestId = requestIdFrom(request);
     response.setHeader('x-request-id', requestId);
     response.setHeader('cache-control', 'no-store');
@@ -242,7 +247,7 @@ export function createRemoteMcpRequestHandler(
 
     try {
       await server.connect(transport);
-      await transport.handleRequest(request, response);
+      await transport.handleRequest(request, response, parsedBody);
     } catch {
       options.onDiagnostic?.({
         event: 'transport_error',
