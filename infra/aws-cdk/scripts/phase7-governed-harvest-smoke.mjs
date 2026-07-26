@@ -92,9 +92,7 @@ if (
   !parsedUrl.hostname.endsWith('.execute-api.ap-southeast-1.amazonaws.com') ||
   !parsedUrl.pathname.replace(/\/+$/, '').endsWith('/staging')
 ) {
-  console.error(
-    'The governed-harvest smoke requires the approved HTTPS staging API endpoint.',
-  );
+  console.error('The governed-harvest smoke requires the approved HTTPS staging API endpoint.');
   process.exit(1);
 }
 
@@ -134,7 +132,7 @@ async function request(route, { method = 'GET', body } = {}) {
       error && typeof error.code === 'string' ? error.code : undefined,
       error && typeof error.requestId === 'string'
         ? error.requestId
-        : response.headers.get('x-request-id') ?? undefined,
+        : (response.headers.get('x-request-id') ?? undefined),
     );
   }
   return payload;
@@ -164,10 +162,7 @@ function memoryIds(payload) {
 }
 
 function sameStrings(left, right) {
-  return (
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function assert(condition, message) {
@@ -224,16 +219,11 @@ try {
     }),
   );
   const run = asRecord(created.run);
-  const candidates = Array.isArray(created.candidates)
-    ? created.candidates.map(asRecord)
-    : [];
+  const candidates = Array.isArray(created.candidates) ? created.candidates.map(asRecord) : [];
   const runMetadata = asRecord(run.metadata);
 
   assert(run.status === 'COMPLETED', 'Harvest run did not complete.');
-  assert(
-    runMetadata.extractorMode === 'model',
-    'Harvest did not use model-backed extraction.',
-  );
+  assert(runMetadata.extractorMode === 'model', 'Harvest did not use model-backed extraction.');
   assert(
     runMetadata.reasoningProvider === 'amazon-bedrock',
     'Harvest did not use the Amazon Bedrock reasoning provider.',
