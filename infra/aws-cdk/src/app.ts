@@ -17,6 +17,7 @@ const DATABASE_SECRET_NAME = 'questoros-memory/staging/database-url';
 const FUNCTION_NAME = 'questoros-memory-staging-api';
 const LOG_GROUP_NAME = '/questoros-memory/staging/api';
 const TITAN_MODEL_ARN = 'arn:aws:bedrock:us-west-2::foundation-model/amazon.titan-embed-text-v2:0';
+const NOVA_MICRO_MODEL_ARN = 'arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-micro-v1:0';
 const PARAMETERS_SECRETS_EXTENSION_PARAMETER =
   '/aws/service/aws-parameters-and-secrets-lambda-extension/x86/latest';
 
@@ -42,8 +43,8 @@ function standardAlarmProps(
 /**
  * QuestorOS Memory staging infrastructure.
  *
- * This stack is synthesis-ready but deployment remains blocked until explicit
- * cost, budget, secret-provisioning, and teardown approval.
+ * Phase 7 enables bounded Amazon Nova Micro reasoning for authorized staging
+ * harvest operations. Authoritative memory writes remain approval-gated.
  */
 export class QuestorosMemoryStagingStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -51,7 +52,7 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
 
     cdk.Tags.of(this).add('project', 'questoros-memory');
     cdk.Tags.of(this).add('environment', 'staging');
-    cdk.Tags.of(this).add('phase', '6');
+    cdk.Tags.of(this).add('phase', '7');
     cdk.Tags.of(this).add('manager', 'questoros');
 
     const dbSecret = secretsmanager.Secret.fromSecretNameV2(
@@ -78,7 +79,7 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
 
     const fn = new nodejs.NodejsFunction(this, 'MemoryApiFunction', {
       functionName: FUNCTION_NAME,
-      description: 'QuestorOS Memory staging REST API',
+      description: 'QuestorOS Memory staging REST API with bounded Bedrock reasoning',
       runtime: lambda.Runtime.NODEJS_24_X,
       architecture: lambda.Architecture.X86_64,
       entry: path.join(repoRoot, 'services', 'memory-api', 'src', 'lambda.ts'),
@@ -119,6 +120,13 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
         EMBEDDING_NORMALIZE: 'true',
         AWS_BEDROCK_REGION: BEDROCK_REGION,
         EMBEDDING_AUTO_ON_WRITE: 'false',
+        REASONING_PROVIDER: 'amazon-bedrock',
+        REASONING_MODEL_ID: 'amazon.nova-micro-v1:0',
+        REASONING_REGION: BEDROCK_REGION,
+        REASONING_ALLOW_LIVE_CALLS: 'true',
+        REASONING_MAX_INPUT_CHARACTERS: '24000',
+        REASONING_MAX_OUTPUT_TOKENS: '1024',
+        REASONING_TIMEOUT_MS: '7000',
         DATABASE_SECRET_ID: dbSecret.secretArn,
         PARAMETERS_SECRETS_EXTENSION_HTTP_PORT: '2773',
         SECRETS_MANAGER_TTL: '300',
@@ -129,9 +137,9 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
     dbSecret.grantRead(fn);
     fn.addToRolePolicy(
       new iam.PolicyStatement({
-        sid: 'InvokeTitanTextEmbeddingsV2',
+        sid: 'InvokeApprovedBedrockModels',
         actions: ['bedrock:InvokeModel'],
-        resources: [TITAN_MODEL_ARN],
+        resources: [TITAN_MODEL_ARN, NOVA_MICRO_MODEL_ARN],
       }),
     );
 
