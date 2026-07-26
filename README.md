@@ -33,7 +33,7 @@ Phase 8 converts the validated staging MVP into a judge-ready external integrati
 4. provide a reproducible synthetic end-to-end demonstration; and
 5. finalize security, disclosure, setup, and judging documentation.
 
-The Phase 8 branch now contains a tested stateless Streamable HTTP MCP transport with bearer-key authentication and an immutable five-tool read-only allowlist. It has not been deployed to AWS staging or merged into the baseline.
+The Phase 8 branch contains a tested stateless Streamable HTTP MCP transport with bearer-key authentication and an immutable five-tool read-only allowlist. It also contains the smallest staging integration: the existing API Lambda and existing proxy route serve `/staging/mcp`; no second Lambda, API, database, IAM policy, or provisioned service is added. The integration has passed automated synthesis and assembly verification but has not been deployed. A live `cdk diff` review and explicit deployment approval remain required.
 
 Initial remote tools:
 
