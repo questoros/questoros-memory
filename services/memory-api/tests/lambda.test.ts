@@ -115,6 +115,65 @@ describe('API Gateway v2 Lambda adapter', () => {
     await app.close();
   });
 
+  it('routes staged MCP requests through the Web Standards adapter instead of Fastify inject', async () => {
+    const app = Fastify({ logger: false });
+    app.post('/mcp', async () => {
+      throw new Error('Fastify MCP route must not be used by the Lambda adapter.');
+    });
+    const remoteMcpHandler = vi.fn(async (request: Request) => {
+      expect(new URL(request.url).pathname).toBe('/mcp');
+      expect(request.method).toBe('POST');
+      expect(request.headers.get('authorization')).toBe('Bearer qmem_live_test_only');
+      expect(await request.json()).toMatchObject({ method: 'initialize' });
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { ok: true } }), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          'x-request-id': 'gateway-request-mcp',
+        },
+      });
+    });
+    const handler = createLambdaHandler({
+      build: async () => app,
+      initialize: initialized,
+      remoteMcpEnabled: true,
+      remoteMcpHandler,
+    });
+    const initializeBody = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'lambda-test', version: '1.0.0' },
+      },
+    });
+
+    const response = await handler(
+      event({
+        rawPath: '/staging/mcp',
+        headers: {
+          authorization: 'Bearer qmem_live_test_only',
+          accept: 'application/json, text/event-stream',
+          'content-type': 'application/json',
+        },
+        body: initializeBody,
+        requestContext: {
+          requestId: 'gateway-request-mcp',
+          stage: 'staging',
+          http: { method: 'POST', path: '/staging/mcp' },
+        },
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toMatchObject({ result: { ok: true } });
+    expect(response.headers?.['x-request-id']).toBe('gateway-request-mcp');
+    expect(remoteMcpHandler).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
   it('fails closed for unsupported HTTP methods', async () => {
     const build = vi.fn();
     const handler = createLambdaHandler({ build, initialize: initialized });
