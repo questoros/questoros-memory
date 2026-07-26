@@ -43,7 +43,9 @@ function createMockServer() {
         tools.set(name, {
           name,
           handler:
-            typeof shapeOrHandler === 'function' ? shapeOrHandler : (maybeHandler as ToolRegistration['handler']),
+            typeof shapeOrHandler === 'function'
+              ? shapeOrHandler
+              : (maybeHandler as ToolRegistration['handler']),
         });
       },
     },
@@ -77,7 +79,11 @@ describe('Phase 8 remote MCP read-only tools', () => {
     registerRemoteReadOnlyTools(server as never, API_KEY);
 
     expect([...tools.keys()]).toEqual(REMOTE_MCP_READ_ONLY_TOOL_NAMES);
-    expect([...tools.keys()].some((name) => /create|correct|delete|approve|reject|publish|embed/i.test(name))).toBe(false);
+    expect(
+      [...tools.keys()].some((name) =>
+        /create|correct|delete|approve|reject|publish|embed/i.test(name),
+      ),
+    ).toBe(false);
   });
 
   it('routes every operation through memory-service with the request API key', async () => {
@@ -104,7 +110,11 @@ describe('Phase 8 remote MCP read-only tools', () => {
     const { server, tools } = createMockServer();
     registerRemoteReadOnlyTools(server as never, API_KEY);
     mockGet.mockRejectedValueOnce(
-      new ServiceError(ERROR_CODES.SCOPE_DENIED, 'Requested memory is outside credential scope.', 403),
+      new ServiceError(
+        ERROR_CODES.SCOPE_DENIED,
+        'Requested memory is outside credential scope.',
+        403,
+      ),
     );
 
     const result = await tools.get('questoros_memory_get')!.handler({ memoryId: MEMORY_ID });
