@@ -172,9 +172,14 @@ function assert(condition, message) {
 try {
   const identity = asRecord(await request('/v1/whoami'));
   const scope = asRecord(identity.credentialScope);
+  const permissions = Array.isArray(identity.permissions) ? identity.permissions.map(String) : [];
   assert(
     ['TENANT', 'WORKSPACE', 'PROJECT'].includes(String(scope.scopeType)),
     'Authenticated credential scope is invalid.',
+  );
+  assert(
+    permissions.includes('memory:harvest') || permissions.includes('memory:admin'),
+    'The staging API key lacks memory:harvest. Run the gated auth:upgrade-phase7 command, then retry.',
   );
   if (scope.scopeType === 'WORKSPACE') {
     assert(
