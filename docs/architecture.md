@@ -1,37 +1,126 @@
 # Architecture
 
-> Phase 3 adds authenticated REST and MCP transports over a shared memory-service layer. ICARE³™ lifecycle metadata is stored in existing Memory model fields without a new migration.
+> Current baseline: authenticated REST is deployed to AWS staging, the customer MCP server runs locally over stdio, and live Amazon Bedrock reasoning creates governed proposals without automatic authoritative-memory writes.
 
 ## Product path
 
 ```text
 QuestorOS or third-party AI client
                 |
-                v
-Customer-facing QuestorOS Memory MCP / REST API
-                |
-                v
-@questoros-memory/memory-service (shared business logic)
-                |
-                v
-Authentication, tenant isolation, permissions, audit
-                |
-                v
-Memory extraction, retrieval, ranking, context assembly
-                |
-                v
-CockroachDB distributed memory and vector storage
-                |
-                +----> AWS Lambda workflows
-                |
-                +----> Amazon S3 source artifacts
+                +-------------------------------+
+                |                               |
+                v                               v
+Local MCP stdio server                 AWS API Gateway (staging)
+services/mcp-server                    ap-southeast-1
+                |                               |
+                +---------------+---------------+
+                                |
+                                v
+             @questoros-memory/memory-service
+                  shared business logic
+                                |
+                                v
+       Authentication, permissions, scope enforcement, audit
+                                |
+             +------------------+------------------+
+             |                                     |
+             v                                     v
+CockroachDB memory, revisions,             Governed harvesting
+provenance, and vector storage             and reasoning workflow
+             |                                     |
+             |                         +-----------+-----------+
+             |                         |                       |
+             |                         v                       v
+             |                  Amazon Bedrock            Amazon S3
+             |                  Nova Micro                source artifacts
+             |                  us-west-2
+             |
+             v
+Explainable retrieval and controlled lifecycle operations
 ```
 
-REST and MCP must not duplicate business rules or access Prisma directly. Both call the same `memory-service` transport helpers.
+REST and MCP transports must not duplicate business rules or access Prisma directly. Both call the same `memory-service` transport helpers.
 
-## ICARE³ lifecycle (metadata.icare)
+## Deployed staging boundary
 
-Public: Issue → Context → Analysis → Recommendations → Evaluation → Execution → Evaluation
+The deployed AWS staging stack is in Singapore (`ap-southeast-1`) and includes:
+
+- API Gateway for the authenticated REST interface;
+- Lambda for the memory API and governed-harvest workflow;
+- CloudWatch alarms and operational logging;
+- an S3 bucket for bounded source artifacts;
+- least-privilege Bedrock invoke permissions; and
+- a $5 monthly AWS budget.
+
+The Lambda reasoning client uses `us-west-2` and the approved US cross-Region inference profile `us.amazon.nova-micro-v1:0`. The profile may route only within its permitted US geography.
+
+No production QuestorOS infrastructure is managed by this repository.
+
+## Governed reasoning path
+
+```text
+Synthetic or authorized source
+            |
+            v
+Untrusted source artifact
+            |
+            v
+Nova Micro structured extraction
+            |
+            v
+Strict JSON and Zod validation
+            |
+            v
+Candidate proposal records (PENDING)
+            |
+            v
+Human review boundary
+            |
+     +------+------+
+     |             |
+     v             v
+approved path   rejected path
+     |
+     v
+authoritative write only through explicit governed action
+```
+
+The model cannot approve, publish, correct, delete, or directly create authoritative memory. Live Phase 7 verification confirmed proposal creation with zero authoritative-memory writes.
+
+## Phase 8 remote MCP target
+
+Phase 8 adds an authenticated remote MCP transport while preserving the same service boundary:
+
+```text
+External MCP client
+        |
+        v
+Remote MCP transport
+        |
+        v
+@questoros-memory/memory-service
+        |
+        v
+Existing authentication, permissions, scope, and audit controls
+```
+
+The remote MCP transport must:
+
+- expose only explicitly approved tools;
+- use API-key or equivalent authenticated context;
+- preserve tenant, workspace, and project scoping;
+- avoid raw SQL and unrestricted database access;
+- keep protocol output separate from diagnostics;
+- return sanitized errors; and
+- default governed harvesting to proposal-only behavior.
+
+The existing local stdio MCP server remains supported during Phase 8.
+
+## ICARE³ lifecycle (`metadata.icare`)
+
+Public lifecycle:
+
+> Issue → Context → Analysis → Recommendations → Evaluation → Execution → Evaluation
 
 Internal stages include `RECOMMENDATION_EVALUATION` and `EXECUTION_EVALUATION` for the two evaluation steps.
 
@@ -49,10 +138,13 @@ Read-only schema inspection and diagnostics
 
 The CockroachDB Cloud Managed MCP Server is an administrative and diagnostic tool. It is not the customer-facing QuestorOS Memory MCP product.
 
-## Initial infrastructure decisions
+## Infrastructure decisions
 
-- CockroachDB plan: Basic
-- CockroachDB cloud: AWS
-- CockroachDB region: Singapore (`ap-southeast-1`)
-- AWS project region: Singapore (`ap-southeast-1`)
-- Existing QuestorOS production infrastructure is outside the scope of this repository.
+- CockroachDB plan: Basic;
+- CockroachDB cloud and region: AWS Singapore (`ap-southeast-1`);
+- AWS staging region: Singapore (`ap-southeast-1`);
+- Bedrock reasoning client Region: `us-west-2`;
+- approved reasoning profile: `us.amazon.nova-micro-v1:0`;
+- provisioned Bedrock throughput: none;
+- embedding auto-on-write: disabled;
+- existing QuestorOS production infrastructure: outside this repository.
