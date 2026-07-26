@@ -45,8 +45,9 @@ function standardAlarmProps(
 /**
  * QuestorOS Memory staging infrastructure.
  *
- * Phase 7 enables bounded Amazon Nova Micro reasoning for authorized staging
- * harvest operations. Authoritative memory writes remain approval-gated.
+ * Phase 8 retains bounded Amazon Nova Micro reasoning and adds the authenticated
+ * read-only remote MCP transport to the existing staging API Lambda. The MCP
+ * route introduces no new compute, database, IAM, or automatic write path.
  */
 export class QuestorosMemoryStagingStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -54,7 +55,7 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
 
     cdk.Tags.of(this).add('project', 'questoros-memory');
     cdk.Tags.of(this).add('environment', 'staging');
-    cdk.Tags.of(this).add('phase', '7');
+    cdk.Tags.of(this).add('phase', '8');
     cdk.Tags.of(this).add('manager', 'questoros');
 
     const dbSecret = secretsmanager.Secret.fromSecretNameV2(
@@ -81,7 +82,7 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
 
     const fn = new nodejs.NodejsFunction(this, 'MemoryApiFunction', {
       functionName: FUNCTION_NAME,
-      description: 'QuestorOS Memory staging REST API with bounded Bedrock reasoning',
+      description: 'QuestorOS Memory staging REST and read-only remote MCP API',
       runtime: lambda.Runtime.NODEJS_24_X,
       architecture: lambda.Architecture.X86_64,
       entry: path.join(repoRoot, 'services', 'memory-api', 'src', 'lambda.ts'),
@@ -129,6 +130,10 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
         REASONING_MAX_INPUT_CHARACTERS: '24000',
         REASONING_MAX_OUTPUT_TOKENS: '1024',
         REASONING_TIMEOUT_MS: '7000',
+        REMOTE_MCP_ENABLED: 'true',
+        // Non-browser MCP clients normally omit Origin. Browser origins remain
+        // denied until an exact HTTPS origin is explicitly reviewed and added.
+        REMOTE_MCP_ALLOWED_ORIGINS: '',
         DATABASE_SECRET_ID: dbSecret.secretArn,
         PARAMETERS_SECRETS_EXTENSION_HTTP_PORT: '2773',
         SECRETS_MANAGER_TTL: '300',
@@ -283,6 +288,9 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'HttpApiId', { value: httpApi.apiId });
     new cdk.CfnOutput(this, 'StagingApiUrl', {
       value: `${httpApi.apiEndpoint}/staging`,
+    });
+    new cdk.CfnOutput(this, 'RemoteMcpUrl', {
+      value: `${httpApi.apiEndpoint}/staging/mcp`,
     });
   }
 }
