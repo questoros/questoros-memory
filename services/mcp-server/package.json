@@ -2,7 +2,7 @@
   "name": "@questoros-memory/mcp-server",
   "version": "0.1.0",
   "private": true,
-  "description": "MCP stdio server for QuestorOS Memory",
+  "description": "Local stdio and authenticated read-only Streamable HTTP MCP transports for QuestorOS Memory",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -11,7 +11,9 @@
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
     "dev": "tsx src/cli.ts",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "dev:remote": "tsx src/remote-cli.ts",
+    "start:remote": "node dist/remote-cli.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
