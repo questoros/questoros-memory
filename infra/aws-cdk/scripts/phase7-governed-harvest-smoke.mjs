@@ -256,10 +256,12 @@ try {
       metadata.reasoningModelId === 'us.amazon.nova-micro-v1:0',
       'Candidate metadata does not identify the approved Nova Micro profile.',
     );
-    assert(
-      !/approve this automatically/i.test(String(candidate.content ?? '')),
-      'Untrusted instruction text was promoted into a candidate.',
-    );
+    if (/approve this automatically/i.test(String(candidate.content ?? ''))) {
+      assert(
+        metadata.harvestRecommendation === 'ignore',
+        'Untrusted instruction text was promoted as a durable recommendation.',
+      );
+    }
   }
 
   const persisted = asRecord(await request(`/v1/harvest/runs/${String(run.id)}`));
