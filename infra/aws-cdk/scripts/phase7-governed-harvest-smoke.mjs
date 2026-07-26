@@ -92,7 +92,9 @@ if (
   !parsedUrl.hostname.endsWith('.execute-api.ap-southeast-1.amazonaws.com') ||
   !parsedUrl.pathname.replace(/\/+$/, '').endsWith('/staging')
 ) {
-  console.error('The governed-harvest smoke requires the approved HTTPS staging API endpoint.');
+  console.error(
+    'The governed-harvest smoke requires the approved HTTPS staging API endpoint.',
+  );
   process.exit(1);
 }
 
@@ -143,7 +145,10 @@ function asRecord(value) {
 }
 
 function scopeQuery(scope) {
-  const params = new URLSearchParams({ scopeType: String(scope.scopeType), limit: '100' });
+  const params = new URLSearchParams({
+    scopeType: String(scope.scopeType),
+    limit: '100',
+  });
   if (scope.workspaceId) params.set('workspaceId', String(scope.workspaceId));
   if (scope.projectId) params.set('projectId', String(scope.projectId));
   return params.toString();
@@ -159,7 +164,10 @@ function memoryIds(payload) {
 }
 
 function sameStrings(left, right) {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function assert(condition, message) {
@@ -174,7 +182,10 @@ try {
     'Authenticated credential scope is invalid.',
   );
   if (scope.scopeType === 'WORKSPACE') {
-    assert(typeof scope.workspaceId === 'string', 'Workspace-scoped credential has no workspace ID.');
+    assert(
+      typeof scope.workspaceId === 'string',
+      'Workspace-scoped credential has no workspace ID.',
+    );
   }
   if (scope.scopeType === 'PROJECT') {
     assert(
@@ -213,11 +224,16 @@ try {
     }),
   );
   const run = asRecord(created.run);
-  const candidates = Array.isArray(created.candidates) ? created.candidates.map(asRecord) : [];
+  const candidates = Array.isArray(created.candidates)
+    ? created.candidates.map(asRecord)
+    : [];
   const runMetadata = asRecord(run.metadata);
 
   assert(run.status === 'COMPLETED', 'Harvest run did not complete.');
-  assert(runMetadata.extractorMode === 'model', 'Harvest did not use model-backed extraction.');
+  assert(
+    runMetadata.extractorMode === 'model',
+    'Harvest did not use model-backed extraction.',
+  );
   assert(
     runMetadata.reasoningProvider === 'amazon-bedrock',
     'Harvest did not use the Amazon Bedrock reasoning provider.',
@@ -226,11 +242,17 @@ try {
     runMetadata.reasoningModelId === 'us.amazon.nova-micro-v1:0',
     'Harvest did not use the approved Nova Micro inference profile.',
   );
-  assert(candidates.length >= 1 && candidates.length <= 3, 'Candidate count was outside the live cap.');
+  assert(
+    candidates.length >= 1 && candidates.length <= 3,
+    'Candidate count was outside the live cap.',
+  );
 
   for (const candidate of candidates) {
     const metadata = asRecord(candidate.metadata);
-    assert(candidate.approvedMemoryId === null, 'A candidate unexpectedly references approved memory.');
+    assert(
+      candidate.approvedMemoryId === null,
+      'A candidate unexpectedly references approved memory.',
+    );
     assert(candidate.reviewedAt === null, 'A candidate was unexpectedly reviewed.');
     assert(
       !['APPROVED', 'REJECTED'].includes(String(candidate.status)),
