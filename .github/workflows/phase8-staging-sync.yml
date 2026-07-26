@@ -35,7 +35,7 @@ jobs:
           run_install: false
       - name: Update lockfile and formatting
         run: |
-          pnpm install --lockfile-only
+          pnpm install --no-frozen-lockfile
           pnpm exec prettier --write \
             services/mcp-server/src/remote.ts \
             services/memory-api/package.json \
