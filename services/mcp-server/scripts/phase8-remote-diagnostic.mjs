@@ -86,7 +86,7 @@ const smokePayload = parseSmokeJson(smoke.stdout);
 const requestId =
   smokePayload && typeof smokePayload.requestId === 'string' ? smokePayload.requestId : 'not-found';
 
-const startTime = String(Math.max(0, startedAt - 5 * 60_000));
+const startTime = String(Math.max(0, startedAt - 10 * 60_000));
 const awsBase = ['--profile', AWS_PROFILE, '--region', AWS_REGION];
 
 const functionConfiguration = run('aws', [
@@ -110,7 +110,7 @@ const recentLogs = run('aws', [
   '--start-time',
   startTime,
   '--limit',
-  '250',
+  '500',
   '--query',
   'events[].{timestamp:timestamp,message:message,stream:logStreamName}',
   '--output',
