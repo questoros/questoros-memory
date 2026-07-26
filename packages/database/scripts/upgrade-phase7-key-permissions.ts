@@ -107,7 +107,9 @@ async function main(): Promise<void> {
     if (row.status !== 'ACTIVE') fail('The matching API key is not ACTIVE.');
 
     const current = validatePermissions(row.permissions);
-    const next = sortPermissions([...new Set<ApiPermission>([...current, ...REQUIRED_PHASE7_PERMISSIONS])]);
+    const next = sortPermissions([
+      ...new Set<ApiPermission>([...current, ...REQUIRED_PHASE7_PERMISSIONS]),
+    ]);
     const added = next.filter((permission) => !current.includes(permission));
 
     if (added.length === 0) {
@@ -132,7 +134,8 @@ async function main(): Promise<void> {
        RETURNING permissions`,
       [JSON.stringify(next), row.id, keyHash],
     );
-    if (updated.rows.length !== 1) fail('The API key changed concurrently; no permission update was applied.');
+    if (updated.rows.length !== 1)
+      fail('The API key changed concurrently; no permission update was applied.');
     validatePermissions(updated.rows[0]!.permissions);
     await client.query('COMMIT');
 
