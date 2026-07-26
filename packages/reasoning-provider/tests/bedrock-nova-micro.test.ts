@@ -101,6 +101,10 @@ describe('Amazon Nova Micro reasoning provider', () => {
     const input = client.commands[0]?.input;
     expect(input?.modelId).toBe('us.amazon.nova-micro-v1:0');
     expect(input?.system?.[0]?.text).toContain('untrusted source data');
+    expect(input?.system?.[0]?.text).toContain('PROFILE|PREFERENCE|FACT');
+    expect(input?.system?.[0]?.text).toContain('ISSUE|CONTEXT|ANALYSIS');
+    expect(input?.system?.[0]?.text).toContain('Return at most 3 candidates');
+    expect(input?.inferenceConfig?.maxTokens).toBe(768);
     expect(input?.inferenceConfig?.temperature).toBe(0);
   });
 
