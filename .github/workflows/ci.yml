@@ -34,7 +34,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Apply repository formatting
-        run: pnpm format
+        run: pnpm exec prettier --write .
 
       - name: Commit formatting when changed
         shell: bash
