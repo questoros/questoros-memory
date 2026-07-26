@@ -75,12 +75,17 @@ export function loadReasoningConfig(env: NodeJS.ProcessEnv = process.env): Reaso
   }
 
   const provider = providerRaw as ReasoningProviderName;
-  const defaultModelId =
-    provider === 'amazon-bedrock' ? DEFAULT_BEDROCK_REASONING_MODEL_ID : DEFAULT_REASONING_MODEL_ID;
+  const configuredModelId = readEnv(env, 'REASONING_MODEL_ID');
+  const modelId =
+    provider === 'amazon-bedrock'
+      ? DEFAULT_BEDROCK_REASONING_MODEL_ID
+      : configuredModelId ?? DEFAULT_REASONING_MODEL_ID;
 
   return {
     provider,
-    modelId: readEnv(env, 'REASONING_MODEL_ID') ?? defaultModelId,
+    // Phase 7 intentionally locks live Bedrock to Nova Micro. A different
+    // environment value is ignored rather than widening cost or IAM scope.
+    modelId,
     region: readEnv(env, 'REASONING_REGION') ?? DEFAULT_REASONING_REGION,
     allowLiveCalls: parseBoolean(readEnv(env, 'REASONING_ALLOW_LIVE_CALLS'), false),
     maxInputCharacters: parseInteger(
