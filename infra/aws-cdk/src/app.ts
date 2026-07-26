@@ -105,7 +105,10 @@ export class QuestorosMemoryStagingStack extends cdk.Stack {
       logGroup,
       memorySize: 1024,
       timeout: cdk.Duration.seconds(30),
-      reservedConcurrentExecutions: 5,
+      // New AWS accounts can have a reduced regional concurrency quota. Do not
+      // reserve function concurrency until the account quota supports leaving
+      // AWS's required unreserved pool. The HTTP API throttle and $5 budget
+      // remain the staging traffic and spend controls.
       environment: {
         NODE_ENV: 'production',
         NODE_OPTIONS: '--enable-source-maps',
