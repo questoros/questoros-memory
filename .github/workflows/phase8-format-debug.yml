@@ -1,0 +1,54 @@
+name: Phase 8 format debug
+
+on:
+  pull_request:
+    paths:
+      - 'README.md'
+      - 'docs/architecture.md'
+      - 'docs/mcp-server.md'
+      - 'docs/phase-8-remote-mcp-demo.md'
+      - '.github/workflows/phase8-format-debug.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.16.0
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format Phase 8 documentation
+        run: >-
+          pnpm exec prettier --write
+          README.md
+          docs/architecture.md
+          docs/mcp-server.md
+          docs/phase-8-remote-mcp-demo.md
+
+      - name: Upload formatted documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase8-formatted-docs
+          path: |
+            README.md
+            docs/architecture.md
+            docs/mcp-server.md
+            docs/phase-8-remote-mcp-demo.md
+          if-no-files-found: error
+          retention-days: 1
