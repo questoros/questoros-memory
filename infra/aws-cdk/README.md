@@ -1,6 +1,8 @@
 # QuestorOS Memory — AWS staging
 
-**Status:** Phase 6 packaging and synthesis only. **Do not deploy** without explicit cost, budget, secret-provisioning, and teardown approval.
+**Status:** Phase 6 staging is deployed in `ap-southeast-1` after successful live smoke, teardown, restoration, and final smoke validation. Production and remote MCP remain undeployed.
+
+Additional environments, broader permissions, higher spend, live model activation, or production deployment still require explicit approval.
 
 ## Topology
 
@@ -22,7 +24,7 @@ The previous inline `501 Not deployed` Lambda placeholder has been replaced by t
 | CockroachDB cluster    | Singapore        |
 | Bedrock InvokeModel    | `us-west-2`      |
 
-Application and Bedrock regions remain separate settings.
+Application and Bedrock regions remain separate settings. Phase 6 did not invoke Bedrock.
 
 ## Database secret
 
@@ -32,7 +34,7 @@ The stack imports, but does not create or delete, this secret:
 questoros-memory/staging/database-url
 ```
 
-The value may be either the raw CockroachDB PostgreSQL URL or JSON:
+The secret targets the CockroachDB database `questoros_memory`. Its value may be either the raw PostgreSQL URL or JSON:
 
 ```json
 {
@@ -42,7 +44,7 @@ The value may be either the raw CockroachDB PostgreSQL URL or JSON:
 
 At invocation time, the AWS Parameters and Secrets Lambda Extension retrieves and caches the value. The Lambda function receives only the secret ARN in `DATABASE_SECRET_ID`; the database URL is not embedded in CloudFormation, CDK outputs, source control, or logs.
 
-Before an approved deployment, the secret must be created out-of-band with the existing private `DATABASE_URL`. Never paste the value into an issue, PR, command transcript, or chat.
+Never paste the value into an issue, pull request, command transcript, or chat.
 
 ## Package verification
 
@@ -88,7 +90,7 @@ Do not grant `bedrock:*`, AdministratorAccess, PowerUserAccess, streaming invoca
 - `EMBEDDING_AUTO_ON_WRITE=false`
 - no historical backfill
 - no batch jobs or provisioned throughput
-- Lambda reserved concurrency is intentionally unset for reduced-quota staging accounts
+- Lambda reserved concurrency intentionally unset for the reduced-quota staging account
 - API Gateway stage throttling: 20 requests/second, burst 40
 - $5 monthly AWS Budget with actual and forecast alerts
 - Lambda timeout: 30 seconds
@@ -102,9 +104,9 @@ Do not grant `bedrock:*`, AdministratorAccess, PowerUserAccess, streaming invoca
 - no permissive CORS
 - remote MCP is not deployed
 
-Reserved concurrency may be added later only after the regional Lambda concurrency quota supports AWS's required unreserved pool. Until then, API Gateway throttling and the budget alerts are the approved staging traffic and spend controls.
+Reserved concurrency may be added later only after the regional Lambda concurrency quota supports AWS's required unreserved pool. Until then, API Gateway throttling and budget alerts are the staging traffic and spend controls.
 
-The stack prepares five standard-resolution alarms without notification actions:
+The stack creates five standard-resolution alarms without notification actions:
 
 ```text
 Lambda errors
@@ -116,23 +118,15 @@ HTTP API p95 latency ≥ 25 seconds for two periods
 
 Notification destinations remain an explicit deployment-time decision and are never committed to the repository.
 
-## Cost, budget, and teardown gate
+## Deployment and teardown
 
-The reviewed estimate, required $5 monthly budget, secret-input rules, exact deployment command, exact stack-only teardown command, and teardown proof are documented in:
+The package scripts remain intentionally blocked against accidental deployment or teardown. The reviewed manual commands, cost estimate, $5 budget, secret rules, teardown behavior, and proof results are documented in:
 
 ```text
 docs/phase-6-aws-cost-and-teardown.md
 ```
 
-The deployment command remains intentionally blocked:
-
-```powershell
-pnpm.cmd --filter @questoros-memory/aws-cdk deploy
-```
-
 ## Read-only staging smoke test
-
-The prepared smoke test remains blocked until an approved deployment:
 
 ```powershell
 $env:RUN_PHASE6_STAGING_SMOKE="true"
@@ -143,15 +137,19 @@ pnpm.cmd --filter @questoros-memory/aws-cdk smoke:staging
 
 It checks health, database readiness, and authenticated identity only. It performs no writes, Bedrock calls, or external provider calls and prints no credentials or response bodies.
 
-Current boundaries:
+## Current validated state
 
 ```text
-Successful staging application deployment: none yet
-Public endpoint: none
-CDK bootstrap resources: created
-Private database secret: created out-of-band
-$5 AWS Budget: created out-of-band
-Live Bedrock calls during Phase 6 packaging: none
+Staging application deployment: restored and live
+Health check: passed
+Readiness check: passed
+Authenticated identity: passed
+Stack-only teardown proof: passed
+Restoration smoke proof: passed
+CDK bootstrap resources: preserved
+Private database secret: preserved
+$5 AWS Budget: preserved
+Live Bedrock calls: none
 Live Google/Microsoft calls: none
 Production changes: none
 ```
