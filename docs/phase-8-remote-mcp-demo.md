@@ -9,7 +9,7 @@ Phase 7 is complete and merged. The following facts are already proven and must 
 - Governed harvesting creates proposal candidates only.
 - A successful live test created one `PENDING` candidate and zero authoritative-memory writes.
 - REST and MCP must use `@questoros-memory/memory-service` rather than Prisma directly.
-- The current customer MCP server is local stdio only.
+- The current customer MCP server is local stdio only on the merged baseline.
 - The CockroachDB Cloud Managed MCP server is an administrative diagnostic tool, not the product MCP server.
 - Existing QuestorOS production infrastructure is outside this repository.
 - The AWS staging budget remains $5 per month.
@@ -20,6 +20,13 @@ Phase 8 must not add automatic approval, publication, correction, deletion, or a
 
 Deliver a secure authenticated remote MCP endpoint and a reproducible external-client demonstration of persistent organizational intelligence without changing the established memory-service, authorization, governance, or cost boundaries.
 
+## Current checkpoint
+
+- **8A — complete:** public status and architecture documentation corrected.
+- **8B — implementation and automated validation complete:** authenticated stateless Streamable HTTP transport, immutable read-only allowlist, official-client integration tests, safe origin handling, sanitized errors, and request correlation.
+- **8B deployment — not started:** remote MCP has not been added to the AWS staging stack.
+- **8C–8E — pending:** live external-client staging proof, reproducible demo, and submission package.
+
 ## Work order
 
 ### 8A — Baseline audit and documentation correction
@@ -28,27 +35,29 @@ Required:
 
 - update README status;
 - update architecture to show deployed REST, CockroachDB, Bedrock, S3, and local MCP;
-- state clearly that remote MCP is not yet available;
+- state clearly that remote MCP is not yet available on the merged baseline;
 - document the Phase 8 security and acceptance boundaries;
 - remove claims that AWS is not deployed.
 
 Acceptance:
 
-- no public document claims that the current MCP server is already remote;
+- no public document claims that the merged MCP server is already remote;
 - no public document claims that AWS staging is undeployed;
 - no production-readiness claim is made.
 
 ### 8B — Authenticated remote MCP transport
 
-Required:
+Delivered on the Phase 8 branch:
 
-- add a remote HTTPS-capable MCP transport;
-- reuse the existing MCP tool handlers or shared tool definitions;
-- route every operation through `@questoros-memory/memory-service`;
-- preserve API-key authentication, permissions, scope enforcement, and audit correlation;
-- keep protocol output separate from diagnostics;
-- return sanitized errors only;
-- expose an explicit tool allowlist.
+- a stateless MCP Streamable HTTP request handler;
+- pre-initialization bearer-key authentication through `transportWhoami`;
+- reuse of the existing `memory-service` transport functions;
+- an immutable source-defined remote tool allowlist;
+- sanitized JSON-RPC and MCP tool errors;
+- request-correlation IDs without secret-bearing diagnostics;
+- deny-by-default browser origin handling when `Origin` is present;
+- a gated loopback-first Node development entrypoint; and
+- official MCP client integration tests.
 
 Initial remote allowlist:
 
@@ -60,16 +69,24 @@ questoros_memory_search
 questoros_memory_history
 ```
 
-A proposal-only harvest tool may be added only after the read-only transport is working and tested. Do not expose create, correct, delete, approval, rejection, publication, embedding mutation, or administrative tools in the first remote version.
+A proposal-only harvest tool may be added only after the read-only transport is deployed and tested. Do not expose create, correct, delete, approval, rejection, publication, embedding mutation, or administrative tools in the first remote version.
 
-Acceptance:
+Acceptance already proven in automated tests:
 
-- unauthenticated request rejected;
-- invalid, revoked, and expired key rejected;
-- out-of-scope request rejected;
-- allowed read operation succeeds;
-- non-allowlisted tool cannot be invoked;
-- no client receives `DATABASE_URL`, AWS credentials, raw request headers, raw model output, or private chain-of-thought.
+- unauthenticated request rejected before MCP initialization;
+- invalid key rejected with a sanitized code;
+- allowed read operation succeeds through the official MCP client;
+- non-allowlisted write tool cannot be invoked;
+- simulated out-of-scope request returns a sanitized `SCOPE_DENIED` tool result;
+- browser origin not on the allowlist is rejected;
+- no protocol result contains an API key, `DATABASE_URL`, AWS credentials, raw request headers, raw model output, or private chain-of-thought.
+
+Acceptance still requiring staging deployment and live proof:
+
+- expired and revoked live keys rejected;
+- project isolation proven against live staging data;
+- external client connects through the deployed HTTPS endpoint;
+- audit correlation confirmed in live staging logs.
 
 ### 8C — External-client integration test
 
@@ -176,7 +193,7 @@ Before exposing a remote harvest tool:
 
 Phase 8 is complete only when:
 
-- a remote authenticated MCP client can connect;
+- a remote authenticated MCP client can connect to staging;
 - the initial read-only tool allowlist works;
 - scope isolation is proven;
 - one reproducible cross-session demo works;
