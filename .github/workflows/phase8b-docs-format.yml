@@ -1,0 +1,36 @@
+name: Phase 8B docs format
+
+on:
+  pull_request:
+    paths:
+      - 'README.md'
+      - 'docs/mcp-server.md'
+      - 'docs/phase-8-remote-mcp-demo.md'
+      - '.github/workflows/phase8b-docs-format.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.16.0
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - name: Format Phase 8B documentation
+        run: pnpm exec prettier --write README.md docs/mcp-server.md docs/phase-8-remote-mcp-demo.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase8b-formatted-docs
+          path: |
+            README.md
+            docs/mcp-server.md
+            docs/phase-8-remote-mcp-demo.md
+          retention-days: 1
