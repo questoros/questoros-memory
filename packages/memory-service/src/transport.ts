@@ -9,7 +9,6 @@ import {
   parseContract,
   getMemoryQuerySchema,
   type AuthContext,
-  type ErrorCode,
 } from '@questoros-memory/memory-core';
 import { ReasoningProviderError } from '@questoros-memory/reasoning-provider';
 import { authenticate } from './auth.js';
@@ -53,7 +52,7 @@ async function withAuth(token: string | undefined): Promise<{
 
 function mapReasoningProviderError(error: unknown): Error {
   if (error instanceof ReasoningProviderError) {
-    return new ServiceError(error.code as ErrorCode, error.message, error.statusCode);
+    return new ServiceError(error.code, error.message, error.statusCode);
   }
   if (error instanceof Error) return error;
   return new ServiceError(ERROR_CODES.INTERNAL_ERROR, 'Internal server error.', 500);
