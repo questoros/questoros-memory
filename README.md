@@ -29,11 +29,23 @@ Phase 8 converts the validated staging MVP into a judge-ready external integrati
 
 1. correct public documentation and architecture status;
 2. add an authenticated remote MCP transport without raw database access;
-3. verify an external AI client can retrieve and harvest through the same authorization layer;
+3. verify an external AI client can retrieve through the same authorization layer;
 4. provide a reproducible synthetic end-to-end demonstration; and
 5. finalize security, disclosure, setup, and judging documentation.
 
-Until the remote transport is complete, the QuestorOS Memory MCP server remains local stdio only.
+The Phase 8 branch now contains a tested stateless Streamable HTTP MCP transport with bearer-key authentication and an immutable five-tool read-only allowlist. It has not been deployed to AWS staging or merged into the baseline.
+
+Initial remote tools:
+
+```text
+questoros_memory_whoami
+questoros_memory_get
+questoros_memory_list
+questoros_memory_search
+questoros_memory_history
+```
+
+See [`docs/phase-8-remote-mcp-demo.md`](docs/phase-8-remote-mcp-demo.md) and [`docs/mcp-server.md`](docs/mcp-server.md).
 
 ## ICARE³ reasoning lifecycle
 
@@ -65,7 +77,7 @@ CockroachDB memory, revision, provenance, and vector storage
                 +----> Amazon S3 source artifacts
 ```
 
-REST and MCP transports must use the shared `memory-service` layer. They must not duplicate business rules or access Prisma directly.
+REST and MCP transports use the shared `memory-service` layer. They do not duplicate business rules or access Prisma directly.
 
 ## MVP capabilities
 
@@ -80,6 +92,8 @@ The current staging MVP demonstrates:
 7. local access through the customer-facing MCP server; and
 8. live Bedrock-assisted harvesting that creates proposals without silently changing authoritative memory.
 
+The Phase 8 branch additionally demonstrates authenticated remote MCP protocol integration through the official Streamable HTTP client without enabling remote write tools.
+
 ## Two distinct MCP layers
 
 ### CockroachDB Cloud Managed MCP Server
@@ -88,7 +102,7 @@ Used for read-only schema inspection, diagnostics, retrieval verification, and i
 
 ### QuestorOS Memory MCP Server
 
-The customer-facing server exposes controlled memory operations without raw SQL or unrestricted database access. The current implementation uses stdio locally. Phase 8 adds the authenticated remote transport over the same service and authorization boundaries.
+The customer-facing server exposes controlled memory operations without raw SQL or unrestricted database access. The merged baseline uses stdio locally. The Phase 8 branch adds an authenticated stateless Streamable HTTP transport over the same service and authorization boundaries; staging deployment remains pending explicit approval.
 
 See [`docs/mcp-server.md`](docs/mcp-server.md), [`docs/rest-api.md`](docs/rest-api.md), and [`docs/architecture.md`](docs/architecture.md).
 
