@@ -1,16 +1,21 @@
 # MCP Server
 
-QuestorOS Memory exposes controlled memory operations through MCP without granting raw SQL or unrestricted database access. All MCP tools use `@questoros-memory/memory-service`; MCP transport code must not access Prisma directly or duplicate business rules.
+QuestorOS Memory exposes controlled memory operations through MCP without granting raw SQL or unrestricted database access. Every MCP tool uses `@questoros-memory/memory-service`; MCP transport code does not access Prisma directly or duplicate business rules.
 
-## Current transport
+## Transport status
 
-- **Protocol:** Model Context Protocol
-- **Current transport:** local stdio
+| Transport | Status | Intended use |
+| --- | --- | --- |
+| stdio | Implemented | Local customer-facing MCP clients |
+| Streamable HTTP | Implemented and tested on the Phase 8 branch; not deployed | Authenticated remote MCP behind approved HTTPS termination |
+
+The CockroachDB Cloud Managed MCP server remains a separate, read-only administrative tool. It is not the customer-facing QuestorOS Memory MCP server.
+
+## Local stdio transport
+
 - **Package:** `@questoros-memory/mcp-server`
-- **Entry:** `pnpm --filter @questoros-memory/mcp-server start`
-- **Remote MCP status:** Phase 8 implementation target; not yet available on the merged Phase 7 baseline
-
-## Local configuration
+- **Development entry:** `pnpm --filter @questoros-memory/mcp-server dev`
+- **Built entry:** `pnpm --filter @questoros-memory/mcp-server start`
 
 Copy `.cursor/mcp.phase3.example.json` to `.cursor/mcp.json` locally and set:
 
@@ -28,97 +33,122 @@ Copy `.cursor/mcp.phase3.example.json` to `.cursor/mcp.json` locally and set:
 }
 ```
 
-Prefer aligning with `.cursor/mcp.phase3.example.json`. Never commit `.cursor/mcp.json` or live credentials. `DATABASE_URL` is loaded by the service from the process environment or ignored `.env`; do not paste live connection strings into MCP configuration.
+Never commit `.cursor/mcp.json` or live credentials. `DATABASE_URL` is loaded by the service from the process environment or ignored `.env`; do not put database connection strings in MCP client configuration.
 
-The CockroachDB Cloud Managed MCP server remains a separate, read-only administrative tool. Do not conflate it with this customer-facing memory MCP.
+The local stdio catalog contains the complete controlled tool set exported as `MCP_TOOL_NAMES` from `services/mcp-server/src/tools.ts`. It includes read, write, governed-harvest, review, context-package, and publication operations. Authorization is still enforced by `memory-service` for every invocation.
 
-## Tool catalog
+## Phase 8 remote Streamable HTTP transport
 
-Exactly ten local stdio tools are registered:
+The remote implementation uses the MCP SDK Streamable HTTP transport in stateless mode. It creates a fresh MCP server and transport per request, allowing it to operate behind an HTTPS reverse proxy or gateway without in-memory session affinity.
 
-| Tool name                             | Mutates data | Description                             |
-| ------------------------------------- | ------------ | --------------------------------------- |
-| `questoros_memory_whoami`             | No           | Identity and permissions                |
-| `questoros_memory_create`             | Yes          | Create memory with ICARE³ metadata      |
-| `questoros_memory_get`                | No           | Get memory by ID                        |
-| `questoros_memory_list`               | No           | List with lifecycle filters             |
-| `questoros_memory_search`             | No           | Explainable search                      |
-| `questoros_memory_correct`            | Yes          | Correct with revision history           |
-| `questoros_memory_delete`             | Yes          | Soft delete                             |
-| `questoros_memory_history`            | No           | Revision history                        |
-| `questoros_memory_set_embedding`      | Yes          | Upsert caller-supplied 1024-d embedding |
-| `questoros_memory_generate_embedding` | Yes          | Generate Titan V2 embedding metadata    |
+The implementation is exported from `services/mcp-server/src/remote.ts`:
 
-Tool names are exported as `MCP_TOOL_NAMES` from `services/mcp-server/src/tools.ts`.
+```ts
+import { createRemoteMcpRequestHandler } from '@questoros-memory/mcp-server';
 
-Governed harvesting is currently available through the authenticated REST API. Phase 8 must decide which harvest operations, if any, become remote MCP tools. Approval, publication, and administrative operations must not be exposed by default.
+const handler = createRemoteMcpRequestHandler({
+  allowedOrigins: ['https://approved-client.example'],
+});
+```
+
+The Node HTTP development entry is intentionally gated:
+
+```bash
+REMOTE_MCP_ENABLED=true \
+pnpm --filter @questoros-memory/mcp-server dev:remote
+```
+
+Defaults:
+
+```text
+host: 127.0.0.1
+port: 3100
+route: /mcp
+```
+
+The development listener is plain HTTP and must only be used on loopback or behind approved HTTPS termination. Non-loopback binding is blocked unless `REMOTE_MCP_ALLOW_PUBLIC_BIND=true` is explicitly set. This does not authorize an internet-facing deployment by itself.
+
+Optional configuration:
+
+```text
+REMOTE_MCP_HOST
+REMOTE_MCP_PORT
+REMOTE_MCP_ALLOWED_ORIGINS
+REMOTE_MCP_ALLOW_PUBLIC_BIND
+```
+
+## Remote authentication
+
+Clients send the existing private API key as a bearer token:
+
+```text
+Authorization: Bearer qmem_live_...
+```
+
+Authentication is resolved through `transportWhoami` before MCP initialization or tool discovery. Missing, invalid, revoked, and expired credentials therefore cannot enumerate the remote tool catalog.
+
+The handler also:
+
+- preserves tenant, workspace, and project scope enforcement;
+- preserves permission checks inside `memory-service`;
+- returns sanitized JSON-RPC authentication and transport errors;
+- supplies a sanitized request-correlation ID;
+- rejects unapproved browser origins when an `Origin` header is present;
+- sends `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`; and
+- never returns API keys, database credentials, AWS credentials, raw headers, model output, or private chain-of-thought.
+
+## Remote read-only allowlist
+
+The first remote version registers exactly these five tools:
+
+| Tool | Mutates data | Description |
+| --- | --- | --- |
+| `questoros_memory_whoami` | No | Authenticated identity, permissions, and credential scope |
+| `questoros_memory_get` | No | Retrieve one scoped memory |
+| `questoros_memory_list` | No | List scoped memories with supported filters |
+| `questoros_memory_search` | No | Explainable scoped memory search |
+| `questoros_memory_history` | No | Retrieve revision history for one scoped memory |
+
+The immutable allowlist is exported as `REMOTE_MCP_READ_ONLY_TOOL_NAMES` from `services/mcp-server/src/remote-tools.ts`.
+
+The remote catalog does **not** expose create, correct, delete, embedding mutation, governed harvest, candidate approval or rejection, publication, synchronization, or administrative tools. A non-allowlisted tool call fails through the MCP protocol.
 
 ## Validation
 
-MCP tools use thinner transport-facing Zod input shapes for MCP SDK registration. Full validation still runs through the shared `memory-service` and `memory-core` contracts used by REST. Invalid input produces a safe `Error [CODE]: message` text response with `isError: true`.
+Phase 8B includes unit and official-client integration coverage for:
 
-## Authentication and authorization
+- unauthenticated rejection before MCP initialization;
+- invalid-key rejection with sanitized errors;
+- connection through the official MCP Streamable HTTP client;
+- exact five-tool discovery;
+- successful authenticated `whoami`;
+- rejection of a non-allowlisted write tool;
+- safe `SCOPE_DENIED` results from `memory-service`;
+- browser-origin enforcement; and
+- absence of credentials and infrastructure details in protocol output.
 
-The local API key is supplied at server startup through an environment variable. Every tool invocation passes that key to the transport layer, which resolves tenant, actor, permissions, and scope identically to REST.
+The remote transport is implemented and tested but has not been added to the AWS staging stack. Any staging deployment requires a reviewed CDK diff and explicit approval.
 
-The Phase 8 remote transport must preserve these same controls:
+## Output and diagnostic rules
 
-- authenticated caller context;
-- tenant, workspace, and project scope enforcement;
-- explicit permission checks per tool;
-- sanitized errors;
-- audit correlation; and
-- no raw database credentials in clients.
+Successful tools return structured JSON in MCP text content blocks. Expected failures return safe `Error [CODE]: message` tool results or sanitized JSON-RPC errors.
 
-## Remote MCP requirements
+| Channel | Allowed content |
+| --- | --- |
+| MCP protocol response | Tool data and sanitized errors only |
+| stderr or diagnostic callback | Sanitized event, request ID, code, and optional HTTP status |
 
-The remote transport must:
-
-1. reuse `@questoros-memory/memory-service` exclusively;
-2. expose only an explicit allowlist of tools;
-3. keep protocol responses separate from logs and diagnostics;
-4. support secure HTTPS transport;
-5. reject missing, invalid, revoked, or out-of-scope credentials;
-6. preserve proposal-only governed harvesting;
-7. avoid automatic approval, publication, correction, deletion, or authoritative-memory creation; and
-8. include an external-client integration test using synthetic data.
-
-## Output format
-
-Successful tools return structured JSON in text content blocks. Example create response:
-
-```text
-Memory created successfully with ID: 66666666-6666-4666-8666-666666666666
-{
-  "id": "66666666-6666-4666-8666-666666666666",
-  "metadata": {
-    "title": "Issue framing",
-    "icare": { "icareStage": "ISSUE" }
-  }
-}
-```
-
-## stdout and stderr rules
-
-| Stream | Allowed content              |
-| ------ | ---------------------------- |
-| stdout | MCP protocol messages only   |
-| stderr | Diagnostics and startup logs |
-
-Never print API keys, `DATABASE_URL`, connection strings, raw request headers, source content, model output, or private chain-of-thought to protocol output.
+Never print API keys, `DATABASE_URL`, connection strings, raw request headers, source content, model output, or private chain-of-thought to protocol output or diagnostics.
 
 ## Troubleshooting
 
-| Symptom                               | Likely cause                         |
-| ------------------------------------- | ------------------------------------ |
-| `AUTH_REQUIRED` / `AUTH_INVALID`      | Missing or wrong API key             |
-| `AUTH_REVOKED` / `AUTH_EXPIRED`       | Key is no longer active              |
-| `SCOPE_DENIED`                        | Key scope narrower than requested op |
-| `PERMISSION_DENIED`                   | Key lacks required permission        |
-| `VALIDATION_ERROR`                    | Input failed shared Zod contract     |
-| `REASONING_OUTPUT_INVALID`            | Model output failed strict schema    |
-| Protocol corruption in a local client | Diagnostic text written to stdout    |
-
-## ICARE³ support
-
-Create, list, search, and correct tools accept ICARE³ lifecycle fields (`icareStage`, `reasoningChainId`, `relatedMemoryIds`, and related metadata). Lifecycle data is persisted under `metadata.icare` without a separate migration.
+| Symptom | Likely cause |
+| --- | --- |
+| `AUTH_REQUIRED` / `AUTH_INVALID` | Missing or wrong bearer key |
+| `AUTH_REVOKED` / `AUTH_EXPIRED` | Key is no longer active |
+| `SCOPE_DENIED` | Credential scope is narrower than the requested memory |
+| `PERMISSION_DENIED` | Key lacks the required read permission |
+| `VALIDATION_ERROR` | Tool input failed the shared contract |
+| `MCP_ORIGIN_DENIED` | Browser origin is not explicitly allowlisted |
+| `MCP_METHOD_NOT_ALLOWED` | Unsupported HTTP method for stateless remote MCP |
+| `MCP_TRANSPORT_ERROR` | Sanitized MCP transport failure |
