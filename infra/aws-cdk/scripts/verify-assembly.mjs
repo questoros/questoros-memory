@@ -225,7 +225,9 @@ if (routeSettings.ThrottlingRateLimit !== 20 || routeSettings.ThrottlingBurstLim
 
 const routes = resourcesOfType(resources, 'AWS::ApiGatewayV2::Route');
 if (routes.length !== 2) {
-  fail(`remote MCP must reuse the existing proxy route; expected two API routes, found ${routes.length}.`);
+  fail(
+    `remote MCP must reuse the existing proxy route; expected two API routes, found ${routes.length}.`,
+  );
 }
 
 const outputs = template.Outputs ?? {};
