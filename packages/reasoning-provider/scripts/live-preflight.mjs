@@ -6,17 +6,39 @@
  */
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 
-const MODEL_ID = 'amazon.nova-micro-v1:0';
+const MODEL_ID = 'us.amazon.nova-micro-v1:0';
 const REGION = 'us-west-2';
 
-function fail(category) {
+function sanitizeMessage(message) {
+  return message
+    .replace(/(access[_ -]?key|secret[_ -]?key|session[_ -]?token)\s*[:=]\s*\S+/gi, '$1=[REDACTED]')
+    .slice(0, 500);
+}
+
+function errorDetails(error) {
+  if (!error || typeof error !== 'object') return {};
+  const metadata = '$metadata' in error ? error.$metadata : undefined;
+  return {
+    awsExceptionName: 'name' in error && typeof error.name === 'string' ? error.name : undefined,
+    awsExceptionMessage:
+      error instanceof Error && error.message ? sanitizeMessage(error.message) : undefined,
+    httpStatusCode:
+      metadata && typeof metadata.httpStatusCode === 'number' ? metadata.httpStatusCode : undefined,
+    awsRequestId:
+      metadata && typeof metadata.requestId === 'string' ? metadata.requestId : undefined,
+  };
+}
+
+function fail(category, error) {
   process.stdout.write(
     `${JSON.stringify({
       status: 'failure',
       provider: 'amazon-bedrock',
       modelId: MODEL_ID,
+      modelIdType: 'cross-region-inference-profile',
       region: REGION,
       category,
+      ...errorDetails(error),
     })}\n`,
   );
   process.exit(1);
@@ -101,7 +123,7 @@ try {
     }),
   );
 } catch (error) {
-  fail(categorizeError(error));
+  fail(categorizeError(error), error);
 }
 
 const latencyMs = Date.now() - started;
@@ -136,6 +158,7 @@ process.stdout.write(
     status: 'success',
     provider: 'amazon-bedrock',
     modelId: MODEL_ID,
+    modelIdType: 'cross-region-inference-profile',
     region: REGION,
     proposalOnly: true,
     inputTokens: response?.usage?.inputTokens ?? null,
