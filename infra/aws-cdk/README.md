@@ -58,7 +58,7 @@ This command does **not** deploy. It:
 4. copies the Prisma runtime into the Lambda asset;
 5. synthesizes CloudFormation;
 6. verifies the real handler and Lambda package size;
-7. verifies the Lambda runtime, memory, timeout, and reserved concurrency;
+7. verifies the Lambda runtime, memory, timeout, and reduced-quota-safe concurrency configuration;
 8. verifies the explicit 14-day log group and stack-scoped deletion policy;
 9. verifies five actionless CloudWatch alarms and API Gateway throttling;
 10. verifies that no inline placeholder or obvious secret material is present.
@@ -88,8 +88,9 @@ Do not grant `bedrock:*`, AdministratorAccess, PowerUserAccess, streaming invoca
 - `EMBEDDING_AUTO_ON_WRITE=false`
 - no historical backfill
 - no batch jobs or provisioned throughput
-- Lambda reserved concurrency: 5
+- Lambda reserved concurrency is intentionally unset for reduced-quota staging accounts
 - API Gateway stage throttling: 20 requests/second, burst 40
+- $5 monthly AWS Budget with actual and forecast alerts
 - Lambda timeout: 30 seconds
 - Lambda memory: 1,024 MB
 - explicit log group: `/questoros-memory/staging/api`
@@ -100,6 +101,8 @@ Do not grant `bedrock:*`, AdministratorAccess, PowerUserAccess, streaming invoca
 - AWS Parameters and Secrets extension cache TTL: 300 seconds
 - no permissive CORS
 - remote MCP is not deployed
+
+Reserved concurrency may be added later only after the regional Lambda concurrency quota supports AWS's required unreserved pool. Until then, API Gateway throttling and the budget alerts are the approved staging traffic and spend controls.
 
 The stack prepares five standard-resolution alarms without notification actions:
 
@@ -143,8 +146,11 @@ It checks health, database readiness, and authenticated identity only. It perfor
 Current boundaries:
 
 ```text
-AWS resources created: none
+Successful staging application deployment: none yet
 Public endpoint: none
+CDK bootstrap resources: created
+Private database secret: created out-of-band
+$5 AWS Budget: created out-of-band
 Live Bedrock calls during Phase 6 packaging: none
 Live Google/Microsoft calls: none
 Production changes: none
