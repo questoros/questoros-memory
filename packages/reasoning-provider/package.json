@@ -2,16 +2,18 @@
   "name": "@questoros-memory/reasoning-provider",
   "version": "0.1.0",
   "private": true,
-  "description": "Provider-neutral structured reasoning contracts for agentic harvest and tool selection",
+  "description": "Provider-neutral structured reasoning contracts with gated Amazon Bedrock execution",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . --max-warnings=0",
-    "test": "vitest run"
+    "test": "vitest run",
+    "preflight:bedrock": "node scripts/live-preflight.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.830.0",
     "@questoros-memory/memory-core": "workspace:*",
     "zod": "^4.4.3"
   },
