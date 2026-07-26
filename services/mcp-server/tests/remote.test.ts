@@ -31,7 +31,9 @@ type RunningServer = {
 
 const runningServers: Server[] = [];
 
-async function startServer(options: Parameters<typeof createRemoteMcpRequestHandler>[0] = {}): Promise<RunningServer> {
+async function startServer(
+  options: Parameters<typeof createRemoteMcpRequestHandler>[0] = {},
+): Promise<RunningServer> {
   const handler = createRemoteMcpRequestHandler(options);
   const server = createServer((request, response) => {
     void handler(request, response);
@@ -70,7 +72,10 @@ beforeEach(() => {
   mockWhoami.mockResolvedValue({
     tenantId: '11111111-1111-4111-8111-111111111111',
     actorId: '22222222-2222-4222-8222-222222222222',
-    credentialScope: { scopeType: 'PROJECT', projectId: '33333333-3333-4333-8333-333333333333' },
+    credentialScope: {
+      scopeType: 'PROJECT',
+      projectId: '33333333-3333-4333-8333-333333333333',
+    },
     permissions: ['memory:read'],
   });
   mockGet.mockResolvedValue({ id: MEMORY_ID, content: 'Synthetic project memory.' });
@@ -176,7 +181,11 @@ describe('authenticated remote MCP Streamable HTTP handler', () => {
 
   it('returns a safe MCP tool error when memory-service denies project scope', async () => {
     mockGet.mockRejectedValueOnce(
-      new ServiceError(ERROR_CODES.SCOPE_DENIED, 'Requested memory is outside credential scope.', 403),
+      new ServiceError(
+        ERROR_CODES.SCOPE_DENIED,
+        'Requested memory is outside credential scope.',
+        403,
+      ),
     );
     const { endpoint } = await startServer();
     const client = await connectClient(endpoint);
@@ -188,7 +197,9 @@ describe('authenticated remote MCP Streamable HTTP handler', () => {
       });
       expect(result.isError).toBe(true);
       expect(JSON.stringify(result)).toContain('SCOPE_DENIED');
-      expect(JSON.stringify(result)).not.toMatch(/qmem_live_|DATABASE_URL|postgresql|prisma|stack/i);
+      expect(JSON.stringify(result)).not.toMatch(
+        /qmem_live_|DATABASE_URL|postgresql|prisma|stack/i,
+      );
     } finally {
       await client.close();
     }
