@@ -113,8 +113,8 @@ if (functionProperties.MemorySize !== 1024) {
 if (functionProperties.Timeout !== 30) {
   fail('Lambda timeout is not limited to 30 seconds.');
 }
-if (functionProperties.ReservedConcurrentExecutions !== 5) {
-  fail('Lambda reserved concurrency is not limited to 5.');
+if (functionProperties.ReservedConcurrentExecutions !== undefined) {
+  fail('Lambda reserved concurrency must remain unset for reduced-quota staging accounts.');
 }
 if (!functionProperties.LoggingConfig?.LogGroup) {
   fail('Lambda is not attached to the explicit staging log group.');
@@ -187,5 +187,5 @@ if (templateText.includes('qmem_live_') || templateText.includes('postgresql://'
 }
 
 console.log(
-  `AWS assembly verified: real handler, Prisma Lambda engine, secret reference, explicit 14-day logs, five actionless alarms, ${(totalBytes / 1024 / 1024).toFixed(2)} MiB unzipped.`,
+  `AWS assembly verified: real handler, Prisma Lambda engine, secret reference, explicit 14-day logs, reduced-quota-safe concurrency, five actionless alarms, ${(totalBytes / 1024 / 1024).toFixed(2)} MiB unzipped.`,
 );
