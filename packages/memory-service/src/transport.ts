@@ -4,6 +4,7 @@
  */
 import { getDatabaseClient } from '@questoros-memory/database';
 import {
+  ERROR_CODES,
   ServiceError,
   parseContract,
   getMemoryQuerySchema,
@@ -50,9 +51,12 @@ async function withAuth(token: string | undefined): Promise<{
   return { auth: authContext };
 }
 
-function mapReasoningProviderError(error: unknown): unknown {
-  if (!(error instanceof ReasoningProviderError)) return error;
-  return new ServiceError(error.code as ErrorCode, error.message, error.statusCode);
+function mapReasoningProviderError(error: unknown): Error {
+  if (error instanceof ReasoningProviderError) {
+    return new ServiceError(error.code as ErrorCode, error.message, error.statusCode);
+  }
+  if (error instanceof Error) return error;
+  return new ServiceError(ERROR_CODES.INTERNAL_ERROR, 'Internal server error.', 500);
 }
 
 export async function transportWhoami(token: string | undefined) {
