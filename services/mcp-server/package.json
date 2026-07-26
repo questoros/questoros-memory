@@ -14,7 +14,8 @@
     "start": "node dist/cli.js",
     "dev:remote": "tsx src/remote-cli.ts",
     "start:remote": "node dist/remote-cli.js",
-    "smoke:phase8-remote": "node scripts/phase8-remote-staging-smoke.mjs"
+    "smoke:phase8-remote": "node scripts/phase8-remote-staging-smoke.mjs",
+    "diagnose:phase8-remote": "node scripts/phase8-remote-diagnostic.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
