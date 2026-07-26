@@ -9,13 +9,7 @@ const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 const ENV_PATH = path.join(REPO_ROOT, '.env');
 const REQUIRED_PHASE7_PERMISSIONS: readonly ApiPermission[] = [
   'memory:read',
-  'memory:write',
-  'memory:correct',
-  'memory:delete',
-  'memory:embed',
   'memory:harvest',
-  'memory:review',
-  'memory:publish',
 ];
 
 function fail(message: string): never {
