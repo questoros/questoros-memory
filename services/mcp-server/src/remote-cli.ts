@@ -74,7 +74,9 @@ async function main(): Promise<void> {
   });
 
   console.error(`QuestorOS Memory remote MCP listening on http://${host}:${port}/mcp`);
-  console.error('Use this HTTP listener only for local development or behind approved HTTPS termination.');
+  console.error(
+    'Use this HTTP listener only for local development or behind approved HTTPS termination.',
+  );
 
   const shutdown = () => {
     server.close(() => process.exit(0));
