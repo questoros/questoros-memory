@@ -11,6 +11,8 @@ import type {
 } from './contracts.js';
 import { DeterministicExtractor } from './extractor.js';
 
+const MAX_LIVE_BEDROCK_CANDIDATES = 3;
+
 function mapLegacyStatusToClassification(
   status: string,
 ): GovernedCandidateProposal['analysisClassification'] {
@@ -72,9 +74,16 @@ export class ModelBackedHarvester implements AgenticHarvester {
       })),
     });
 
+    // Each accepted proposal requires conflict and policy reasoning calls. Keep
+    // live Bedrock harvests bounded inside the 30-second staging Lambda and the
+    // approved $5 budget. Mock/offline acceptance remains unchanged.
+    const proposals =
+      this.reasoning.providerName === 'amazon-bedrock'
+        ? extracted.candidates.slice(0, MAX_LIVE_BEDROCK_CANDIDATES)
+        : extracted.candidates;
     const candidates: GovernedCandidateProposal[] = [];
 
-    for (const proposal of extracted.candidates) {
+    for (const proposal of proposals) {
       // Deterministic gate: never promote PRIVATE to organization scope.
       if (
         proposal.ownershipClassification === 'PRIVATE' &&
@@ -170,12 +179,15 @@ export class ModelBackedHarvester implements AgenticHarvester {
       });
     }
 
+    const truncated = proposals.length < extracted.candidates.length;
     return {
       candidates,
       extractorMode: 'model',
       providerName: this.reasoning.providerName,
       modelId: this.reasoning.modelId,
-      rationale: extracted.rationale,
+      rationale: truncated
+        ? `${extracted.rationale} Live Bedrock processing was capped at ${MAX_LIVE_BEDROCK_CANDIDATES} candidates for latency and cost control.`
+        : extracted.rationale,
     };
   }
 

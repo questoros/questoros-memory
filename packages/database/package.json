@@ -18,7 +18,8 @@
     "db:verify": "tsx scripts/verify-schema.ts",
     "db:drift": "node scripts/assert-prisma-drift.mjs",
     "db:verify-vector": "tsx scripts/verify-vector-contract.ts",
-    "auth:bootstrap-local": "tsx scripts/bootstrap-local-auth.ts"
+    "auth:bootstrap-local": "tsx scripts/bootstrap-local-auth.ts",
+    "auth:upgrade-phase7": "tsx scripts/upgrade-phase7-key-permissions.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.7.0",

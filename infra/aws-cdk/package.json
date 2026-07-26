@@ -9,6 +9,7 @@
     "synth": "node scripts/synth.mjs",
     "synth:verify": "node scripts/verify-assembly.mjs",
     "smoke:staging": "node scripts/staging-smoke.mjs",
+    "smoke:phase7-harvest": "node scripts/phase7-governed-harvest-smoke.mjs",
     "deploy": "node -e \"console.error('Deployment is blocked until explicit approval. Use the reviewed command in docs/phase-6-aws-cost-and-teardown.md.'); process.exit(1)\"",
     "teardown": "node -e \"console.error('Teardown is blocked until explicit approval. Use the reviewed stack-only command in docs/phase-6-aws-cost-and-teardown.md.'); process.exit(1)\""
   },

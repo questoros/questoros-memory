@@ -3,8 +3,14 @@
  * Prisma or database repositories directly.
  */
 import { getDatabaseClient } from '@questoros-memory/database';
-import type { AuthContext } from '@questoros-memory/memory-core';
-import { parseContract, getMemoryQuerySchema } from '@questoros-memory/memory-core';
+import {
+  ERROR_CODES,
+  ServiceError,
+  parseContract,
+  getMemoryQuerySchema,
+  type AuthContext,
+} from '@questoros-memory/memory-core';
+import { ReasoningProviderError } from '@questoros-memory/reasoning-provider';
 import { authenticate } from './auth.js';
 import {
   whoami,
@@ -42,6 +48,14 @@ async function withAuth(token: string | undefined): Promise<{
   const prisma = getDatabaseClient();
   const { authContext } = await authenticate(prisma, token);
   return { auth: authContext };
+}
+
+function mapReasoningProviderError(error: unknown): Error {
+  if (error instanceof ReasoningProviderError) {
+    return new ServiceError(error.code, error.message, error.statusCode);
+  }
+  if (error instanceof Error) return error;
+  return new ServiceError(ERROR_CODES.INTERNAL_ERROR, 'Internal server error.', 500);
 }
 
 export async function transportWhoami(token: string | undefined) {
@@ -148,7 +162,11 @@ export async function transportCreateHarvestRun(
   requestId?: string,
 ) {
   const { auth } = await withAuth(token);
-  return createHarvestRun(getDatabaseClient(), auth, body, requestId);
+  try {
+    return await createHarvestRun(getDatabaseClient(), auth, body, requestId);
+  } catch (error) {
+    throw mapReasoningProviderError(error);
+  }
 }
 
 export async function transportGetHarvestRun(token: string | undefined, runId: string) {

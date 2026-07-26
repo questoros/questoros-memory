@@ -32,6 +32,7 @@ const DEMO_PERMISSIONS = [
   'memory:correct',
   'memory:delete',
   'memory:embed',
+  'memory:harvest',
 ];
 
 function pass(msg: string) {
