@@ -12,7 +12,7 @@ import {
 
 const config: ReasoningConfig = {
   provider: 'amazon-bedrock',
-  modelId: 'amazon.nova-micro-v1:0',
+  modelId: 'us.amazon.nova-micro-v1:0',
   region: 'us-west-2',
   allowLiveCalls: true,
   maxInputCharacters: 24_000,
@@ -95,11 +95,11 @@ describe('Amazon Nova Micro reasoning provider', () => {
     });
 
     expect(result.provider).toBe('amazon-bedrock');
-    expect(result.modelId).toBe('amazon.nova-micro-v1:0');
+    expect(result.modelId).toBe('us.amazon.nova-micro-v1:0');
     expect(result.candidates).toHaveLength(1);
     expect(client.commands).toHaveLength(1);
     const input = client.commands[0]?.input;
-    expect(input?.modelId).toBe('amazon.nova-micro-v1:0');
+    expect(input?.modelId).toBe('us.amazon.nova-micro-v1:0');
     expect(input?.system?.[0]?.text).toContain('untrusted source data');
     expect(input?.inferenceConfig?.temperature).toBe(0);
   });
@@ -166,7 +166,7 @@ describe('Amazon Nova Micro reasoning provider', () => {
 });
 
 describe('reasoning configuration and factory', () => {
-  it('uses Nova Micro as the default model only for the Bedrock provider', () => {
+  it('uses the US Nova Micro inference profile as the default only for Bedrock', () => {
     const mock = loadReasoningConfig({});
     const bedrock = loadReasoningConfig({
       REASONING_PROVIDER: 'amazon-bedrock',
@@ -174,19 +174,19 @@ describe('reasoning configuration and factory', () => {
     });
 
     expect(mock.modelId).toBe('mock-structured-v1');
-    expect(bedrock.modelId).toBe('amazon.nova-micro-v1:0');
+    expect(bedrock.modelId).toBe('us.amazon.nova-micro-v1:0');
     expect(bedrock.maxOutputTokens).toBe(2_048);
     expect(bedrock.timeoutMs).toBe(15_000);
   });
 
-  it('locks an alternate live model environment value to approved Nova Micro', () => {
+  it('locks an alternate live model environment value to the approved profile', () => {
     const bedrock = loadReasoningConfig({
       REASONING_PROVIDER: 'amazon-bedrock',
       REASONING_MODEL_ID: 'unapproved.expensive-model-v1:0',
       REASONING_ALLOW_LIVE_CALLS: 'true',
     });
 
-    expect(bedrock.modelId).toBe('amazon.nova-micro-v1:0');
+    expect(bedrock.modelId).toBe('us.amazon.nova-micro-v1:0');
   });
 
   it('keeps explicit configuration calls fail-closed unless live calls are enabled', () => {
@@ -210,7 +210,7 @@ describe('reasoning configuration and factory', () => {
     const provider = createReasoningProvider();
 
     expect(provider.providerName).toBe('amazon-bedrock');
-    expect(provider.modelId).toBe('amazon.nova-micro-v1:0');
+    expect(provider.modelId).toBe('us.amazon.nova-micro-v1:0');
     await expect(
       provider.extract({ sourceText: 'Synthetic source.', sourceLocator: 'synthetic.txt' }),
     ).rejects.toMatchObject({ code: REASONING_ERROR_CODES.REASONING_LIVE_CALLS_DISABLED });
