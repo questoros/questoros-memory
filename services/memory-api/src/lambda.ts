@@ -9,6 +9,7 @@ export interface ApiGatewayV2Event {
   cookies?: string[];
   requestContext: {
     requestId?: string;
+    stage?: string;
     http: {
       method: string;
       path?: string;
@@ -55,6 +56,26 @@ const SUPPORTED_METHODS = new Set<SupportedMethod>([
 function normalizeMethod(method: string): SupportedMethod | null {
   const normalized = method.toUpperCase() as SupportedMethod;
   return SUPPORTED_METHODS.has(normalized) ? normalized : null;
+}
+
+function applicationPath(event: ApiGatewayV2Event): string {
+  const rawPath = event.rawPath ?? event.requestContext.http.path ?? '/';
+  const normalized = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+  const stage = event.requestContext.stage?.trim();
+
+  if (!stage || stage === '$default' || stage.includes('/')) {
+    return normalized;
+  }
+
+  const stagePrefix = `/${stage}`;
+  if (normalized === stagePrefix) {
+    return '/';
+  }
+  if (normalized.startsWith(`${stagePrefix}/`)) {
+    return normalized.slice(stagePrefix.length);
+  }
+
+  return normalized;
 }
 
 function requestHeaders(event: ApiGatewayV2Event): Record<string, string> {
@@ -247,8 +268,7 @@ export function createLambdaHandler(options: LambdaHandlerOptions = {}) {
       };
     }
 
-    const rawPath = event.rawPath ?? event.requestContext.http.path ?? '/';
-    const path = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+    const path = applicationPath(event);
     const url = event.rawQueryString ? `${path}?${event.rawQueryString}` : path;
     const payload =
       event.body === undefined || event.body === null
