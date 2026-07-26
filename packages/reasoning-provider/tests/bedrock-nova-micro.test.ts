@@ -1,5 +1,5 @@
 import { ConverseCommand, type ConverseCommandOutput } from '@aws-sdk/client-bedrock-runtime';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BedrockNovaMicroReasoningProvider,
   createReasoningProvider,
@@ -50,6 +50,10 @@ class FakeClient implements BedrockConverseClient {
     return next;
   }
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('Amazon Nova Micro reasoning provider', () => {
   it('extracts schema-valid proposal-only candidates and attaches trusted provider metadata', async () => {
@@ -175,7 +179,17 @@ describe('reasoning configuration and factory', () => {
     expect(bedrock.timeoutMs).toBe(15_000);
   });
 
-  it('keeps live Bedrock calls fail-closed unless explicitly enabled', () => {
+  it('locks an alternate live model environment value to approved Nova Micro', () => {
+    const bedrock = loadReasoningConfig({
+      REASONING_PROVIDER: 'amazon-bedrock',
+      REASONING_MODEL_ID: 'unapproved.expensive-model-v1:0',
+      REASONING_ALLOW_LIVE_CALLS: 'true',
+    });
+
+    expect(bedrock.modelId).toBe('amazon.nova-micro-v1:0');
+  });
+
+  it('keeps explicit configuration calls fail-closed unless live calls are enabled', () => {
     expect(() =>
       createReasoningProvider({
         config: { ...config, allowLiveCalls: false },
@@ -187,5 +201,32 @@ describe('reasoning configuration and factory', () => {
     } catch (error) {
       expect(error).toMatchObject({ code: REASONING_ERROR_CODES.REASONING_LIVE_CALLS_DISABLED });
     }
+  });
+
+  it('does not silently replace an explicitly configured Bedrock provider with mock', async () => {
+    vi.stubEnv('REASONING_PROVIDER', 'amazon-bedrock');
+    vi.stubEnv('REASONING_ALLOW_LIVE_CALLS', 'false');
+
+    const provider = createReasoningProvider();
+
+    expect(provider.providerName).toBe('amazon-bedrock');
+    expect(provider.modelId).toBe('amazon.nova-micro-v1:0');
+    await expect(
+      provider.extract({ sourceText: 'Synthetic source.', sourceLocator: 'synthetic.txt' }),
+    ).rejects.toMatchObject({ code: REASONING_ERROR_CODES.REASONING_LIVE_CALLS_DISABLED });
+  });
+
+  it('fails closed on invalid explicit Bedrock environment configuration', async () => {
+    vi.stubEnv('REASONING_PROVIDER', 'amazon-bedrock');
+    vi.stubEnv('REASONING_ALLOW_LIVE_CALLS', 'not-a-boolean');
+
+    const provider = createReasoningProvider();
+
+    expect(provider.providerName).toBe('amazon-bedrock');
+    await expect(
+      provider.extract({ sourceText: 'Synthetic source.', sourceLocator: 'synthetic.txt' }),
+    ).rejects.toMatchObject({
+      code: REASONING_ERROR_CODES.REASONING_PROVIDER_NOT_CONFIGURED,
+    });
   });
 });
