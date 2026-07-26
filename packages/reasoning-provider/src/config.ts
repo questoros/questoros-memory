@@ -5,7 +5,7 @@ export type ReasoningProviderName = (typeof REASONING_PROVIDERS)[number];
 
 export const DEFAULT_REASONING_PROVIDER: ReasoningProviderName = 'mock';
 export const DEFAULT_REASONING_MODEL_ID = 'mock-structured-v1';
-export const DEFAULT_BEDROCK_REASONING_MODEL_ID = 'amazon.nova-micro-v1:0';
+export const DEFAULT_BEDROCK_REASONING_MODEL_ID = 'us.amazon.nova-micro-v1:0';
 export const DEFAULT_REASONING_REGION = 'us-west-2';
 export const DEFAULT_REASONING_MAX_INPUT_CHARACTERS = 24_000;
 export const DEFAULT_REASONING_MAX_OUTPUT_TOKENS = 2_048;
@@ -83,8 +83,9 @@ export function loadReasoningConfig(env: NodeJS.ProcessEnv = process.env): Reaso
 
   return {
     provider,
-    // Phase 7 intentionally locks live Bedrock to Nova Micro. A different
-    // environment value is ignored rather than widening cost or IAM scope.
+    // Phase 7 intentionally locks live Bedrock to the approved US Nova Micro
+    // cross-Region inference profile. A different environment value is ignored
+    // rather than widening cost, data-residency, or IAM scope.
     modelId,
     region: readEnv(env, 'REASONING_REGION') ?? DEFAULT_REASONING_REGION,
     allowLiveCalls: parseBoolean(readEnv(env, 'REASONING_ALLOW_LIVE_CALLS'), false),
