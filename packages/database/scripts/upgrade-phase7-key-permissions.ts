@@ -7,10 +7,7 @@ import type { ApiPermission } from '@questoros-memory/memory-core';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 const ENV_PATH = path.join(REPO_ROOT, '.env');
-const REQUIRED_PHASE7_PERMISSIONS: readonly ApiPermission[] = [
-  'memory:read',
-  'memory:harvest',
-];
+const REQUIRED_PHASE7_PERMISSIONS: readonly ApiPermission[] = ['memory:read', 'memory:harvest'];
 
 function fail(message: string): never {
   throw new Error(message);
