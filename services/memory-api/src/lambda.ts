@@ -306,8 +306,7 @@ export function createLambdaHandler(options: LambdaHandlerOptions = {}) {
   const appBuilder =
     options.build ?? (() => buildApp({ logLevel: process.env.LOG_LEVEL ?? 'info' }));
   const initialize = options.initialize ?? initializeLambdaRuntime;
-  const remoteMcpEnabled =
-    options.remoteMcpEnabled ?? process.env.REMOTE_MCP_ENABLED === 'true';
+  const remoteMcpEnabled = options.remoteMcpEnabled ?? process.env.REMOTE_MCP_ENABLED === 'true';
   const remoteMcpHandler =
     options.remoteMcpHandler ??
     createRemoteMcpWebRequestHandler({

@@ -4,10 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { ERROR_CODES, ServiceError } from '@questoros-memory/memory-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  createRemoteMcpRequestHandler,
-  createRemoteMcpWebRequestHandler,
-} from '../src/remote.js';
+import { createRemoteMcpRequestHandler, createRemoteMcpWebRequestHandler } from '../src/remote.js';
 import { REMOTE_MCP_READ_ONLY_TOOL_NAMES } from '../src/remote-tools.js';
 
 const API_KEY = 'qmem_live_remote_http_test_key_only';

@@ -170,10 +170,7 @@ function originAllowed(request: IncomingMessage, allowedOrigins: readonly string
   return originAllowedValue(request.headers.origin, allowedOrigins);
 }
 
-function reportDiagnostic(
-  options: RemoteMcpHandlerOptions,
-  diagnostic: RemoteMcpDiagnostic,
-): void {
+function reportDiagnostic(options: RemoteMcpHandlerOptions, diagnostic: RemoteMcpDiagnostic): void {
   options.onDiagnostic?.(diagnostic);
 }
 
