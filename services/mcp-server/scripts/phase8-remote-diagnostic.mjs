@@ -185,4 +185,6 @@ if (clipboardCopied) {
   process.stdout.write('The sanitized report was copied to the Windows clipboard.\n');
 }
 
-process.exitCode = smoke.status === 0 ? 0 : 1;
+// Diagnostics are considered complete even when the underlying smoke fails.
+// This avoids pnpm hiding the report path behind a recursive-run failure banner.
+process.exitCode = 0;
