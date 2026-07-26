@@ -76,9 +76,7 @@ export function loadReasoningConfig(env: NodeJS.ProcessEnv = process.env): Reaso
 
   const provider = providerRaw as ReasoningProviderName;
   const defaultModelId =
-    provider === 'amazon-bedrock'
-      ? DEFAULT_BEDROCK_REASONING_MODEL_ID
-      : DEFAULT_REASONING_MODEL_ID;
+    provider === 'amazon-bedrock' ? DEFAULT_BEDROCK_REASONING_MODEL_ID : DEFAULT_REASONING_MODEL_ID;
 
   return {
     provider,

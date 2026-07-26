@@ -36,7 +36,12 @@ function categorizeError(error) {
   if (/credential|expired token|could not load|unable to locate/i.test(`${name} ${message}`)) {
     return 'AUTHENTICATION';
   }
-  if (name === 'AccessDeniedException' || name === 'UnauthorizedException' || status === 401 || status === 403) {
+  if (
+    name === 'AccessDeniedException' ||
+    name === 'UnauthorizedException' ||
+    status === 401 ||
+    status === 403
+  ) {
     return 'ACCESS_DENIED';
   }
   if (name === 'ThrottlingException' || name === 'TooManyRequestsException' || status === 429) {
@@ -102,7 +107,9 @@ try {
 const latencyMs = Date.now() - started;
 const content = response?.output?.message?.content ?? [];
 const text = content
-  .map((block) => (block && typeof block === 'object' && typeof block.text === 'string' ? block.text : ''))
+  .map((block) =>
+    block && typeof block === 'object' && typeof block.text === 'string' ? block.text : '',
+  )
   .join('')
   .trim()
   .replace(/^```(?:json)?\s*/i, '')
