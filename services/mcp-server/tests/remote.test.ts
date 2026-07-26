@@ -4,7 +4,10 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { ERROR_CODES, ServiceError } from '@questoros-memory/memory-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createRemoteMcpRequestHandler } from '../src/remote.js';
+import {
+  createRemoteMcpRequestHandler,
+  createRemoteMcpWebRequestHandler,
+} from '../src/remote.js';
 import { REMOTE_MCP_READ_ONLY_TOOL_NAMES } from '../src/remote-tools.js';
 
 const API_KEY = 'qmem_live_remote_http_test_key_only';
@@ -67,6 +70,19 @@ async function connectClient(endpoint: URL): Promise<Client> {
   return client;
 }
 
+function initializeBody() {
+  return {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'web-handler-test', version: '1.0.0' },
+    },
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockWhoami.mockResolvedValue({
@@ -97,16 +113,7 @@ describe('authenticated remote MCP Streamable HTTP handler', () => {
         accept: 'application/json, text/event-stream',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-06-18',
-          capabilities: {},
-          clientInfo: { name: 'unauthenticated-test', version: '1.0.0' },
-        },
-      }),
+      body: JSON.stringify(initializeBody()),
     });
 
     expect(response.status).toBe(401);
@@ -129,16 +136,7 @@ describe('authenticated remote MCP Streamable HTTP handler', () => {
         accept: 'application/json, text/event-stream',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-06-18',
-          capabilities: {},
-          clientInfo: { name: 'invalid-auth-test', version: '1.0.0' },
-        },
-      }),
+      body: JSON.stringify(initializeBody()),
     });
 
     expect(response.status).toBe(401);
@@ -216,6 +214,56 @@ describe('authenticated remote MCP Streamable HTTP handler', () => {
       },
       body: '{}',
     });
+
+    expect(response.status).toBe(403);
+    const payload = await response.json();
+    expect(payload.error.data.code).toBe('MCP_ORIGIN_DENIED');
+    expect(mockWhoami).not.toHaveBeenCalled();
+  });
+});
+
+describe('serverless Web Standards remote MCP handler', () => {
+  it('returns a valid initialize response without Node response hijacking', async () => {
+    const handler = createRemoteMcpWebRequestHandler();
+    const response = await handler(
+      new Request('https://lambda.questoros-memory.invalid/mcp', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${API_KEY}`,
+          accept: 'application/json, text/event-stream',
+          'content-type': 'application/json',
+          'x-request-id': 'web-handler-request-1',
+        },
+        body: JSON.stringify(initializeBody()),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('x-request-id')).toBe('web-handler-request-1');
+    const payload = await response.json();
+    expect(payload.result.serverInfo.name).toBe('questoros-memory-remote');
+    expect(JSON.stringify(payload)).not.toContain(API_KEY);
+    expect(mockWhoami).toHaveBeenCalledWith(API_KEY);
+  });
+
+  it('rejects an unapproved origin before authentication', async () => {
+    const handler = createRemoteMcpWebRequestHandler({
+      allowedOrigins: ['https://approved.example'],
+    });
+    const response = await handler(
+      new Request('https://lambda.questoros-memory.invalid/mcp', {
+        method: 'POST',
+        headers: {
+          origin: 'https://unapproved.example',
+          authorization: `Bearer ${API_KEY}`,
+          accept: 'application/json, text/event-stream',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(initializeBody()),
+      }),
+    );
 
     expect(response.status).toBe(403);
     const payload = await response.json();
