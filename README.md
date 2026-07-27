@@ -16,7 +16,7 @@ QuestorOS Memory turns that missing layer into a standalone service that can sup
 
 ## Live status
 
-Phase 8A–8D are complete:
+Phase 8A–8D are complete, and the repository-side Phase 8E submission package is complete:
 
 - CockroachDB-backed organizational memory and native vector retrieval;
 - tenant, workspace, and project authorization boundaries;
@@ -26,8 +26,9 @@ Phase 8A–8D are complete:
 - proposal-only governed harvesting with zero automatic authoritative writes;
 - correction history, provenance, explainable retrieval, soft deletion, and audit events;
 - an immutable five-tool remote read-only allowlist;
-- live cross-session retrieval, correction, history, isolation, governance, and exact cleanup proof; and
-- a $5 monthly AWS staging budget with no provisioned Bedrock throughput.
+- live cross-session retrieval, correction, history, isolation, governance, and exact cleanup proof;
+- a $5 monthly AWS staging budget with no provisioned Bedrock throughput; and
+- final judge, Devpost, prior-work, security, cost, cleanup, and video documentation.
 
 Remote MCP endpoint:
 
@@ -181,8 +182,10 @@ Full local setup: [`docs/development.md`](docs/development.md).
 ## Judge and submission material
 
 - [`docs/judge-guide.md`](docs/judge-guide.md) — fastest evaluation path and private test-key handling.
-- [`docs/devpost-submission.md`](docs/devpost-submission.md) — copy-ready submission description.
+- [`docs/private-judge-testing-template.md`](docs/private-judge-testing-template.md) — copy-ready private instructions without committed credentials.
+- [`docs/devpost-submission.md`](docs/devpost-submission.md) — copy-ready public submission description.
 - [`docs/video-script.md`](docs/video-script.md) — less-than-three-minute recording plan.
+- [`docs/final-submission-review.md`](docs/final-submission-review.md) — technical evidence, external actions, and final submission gate.
 - [`docs/cost-and-cleanup.md`](docs/cost-and-cleanup.md) — cost boundaries and post-judging teardown.
 - [`docs/phase-8-remote-mcp-demo.md`](docs/phase-8-remote-mcp-demo.md) — reproducible setup, verification, and cleanup.
 - [`docs/pre-existing-work.md`](docs/pre-existing-work.md) — required prior-work disclosure.
