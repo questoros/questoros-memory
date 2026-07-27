@@ -2,6 +2,12 @@
 
 This document defines the staging cost boundary, synthetic-data cleanup procedure, judge-access retirement, and final infrastructure teardown.
 
+## Official availability window
+
+The submission deadline is August 18, 2026. The official judging period runs from August 19 through September 15, 2026, and winners are expected on or around September 21, 2026.
+
+The generated read-only judge credential expires on September 22, 2026 at 23:59:59 UTC. This keeps the functional demo available through judging and the expected announcement date without creating an indefinite credential.
+
 ## Current cost boundary
 
 The AWS staging stack is intentionally small:
