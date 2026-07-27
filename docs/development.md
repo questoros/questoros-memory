@@ -2,12 +2,23 @@
 
 ## Status
 
-Phase 4 — Bedrock Titan Text Embeddings V2 provider, server-generated embedding operation, REST/MCP generate surfaces, and AWS CDK staging preparation (not deployed).
+Phase 8 staging is deployed and live:
+
+- authenticated REST through API Gateway and Lambda;
+- authenticated read-only remote MCP through the same Lambda;
+- local stdio MCP;
+- CockroachDB vector retrieval, revisions, provenance, and audit;
+- live Bedrock Nova Micro governed harvesting;
+- proposal-only model output;
+- reproducible Phase 8D setup, verification, cleanup, and report generation; and
+- full CI plus CDK synthesis and assembly verification.
+
+The repository remains a controlled staging MVP, not a production deployment.
 
 ## Local setup
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm lint
 pnpm test
@@ -18,63 +29,92 @@ pnpm build
 
 Copy `.env.example` to a local `.env` file and replace placeholders privately. Never commit real credentials.
 
-Required:
+Required for database-backed local or demo operations:
 
 - `DATABASE_URL` — CockroachDB connection string for the `questoros_memory` database.
-- `DATABASE_NAME` — Set to `questoros_memory`.
+- `DATABASE_NAME` — set to `questoros_memory`.
 
-Optional for integration tests:
+Private authentication:
 
-- `RUN_DATABASE_INTEGRATION_TESTS` — Set to `true` to enable live database verification.
+- `QUESTOROS_MEMORY_API_KEY` — local API/MCP key.
+- `QUESTOROS_MEMORY_STAGING_API_KEY` — optional explicit staging key selection when more than one `qmem_live_` value exists.
+
+Remote staging:
+
+- `QUESTOROS_MEMORY_STAGING_URL` — approved REST base URL.
+- `QUESTOROS_MEMORY_REMOTE_MCP_URL` — approved remote MCP URL.
+
+Opt-in gates:
+
+- `RUN_DATABASE_INTEGRATION_TESTS=true` — live database verification.
+- `RUN_PHASE8_REMOTE_MCP_SMOKE=true` — read-only remote MCP smoke.
+- `RUN_PHASE8_REMOTE_MCP_DIAGNOSTIC=true` — sanitized AWS diagnostic report.
+- `RUN_PHASE8_DEMO=true` — temporary synthetic cross-session demo and cleanup.
+
+Live AWS reasoning remains disabled by default in local development.
 
 ## Node.js runtime
 
-- **Recommended**: Node.js 24 LTS (used in CI).
-- **Minimum supported**: Node.js 22 LTS.
-- Node.js 20 is not supported (end-of-life as of March 2026).
+- **Recommended:** Node.js 24 LTS, used in CI.
+- **Minimum supported:** Node.js 22 LTS.
+- Node.js 20 is not supported.
 
-## Phase 3 services
+## Local services
 
 ```powershell
-# REST API (local)
+# REST API
 pnpm dev:api
 
-# MCP stdio server (local)
+# MCP stdio server
 pnpm dev:mcp
+
+# Loopback remote MCP development listener
+$env:REMOTE_MCP_ENABLED = "true"
+pnpm.cmd --filter @questoros-memory/mcp-server dev:remote
+Remove-Item Env:REMOTE_MCP_ENABLED -ErrorAction SilentlyContinue
 ```
 
-Phase 3 unit tests mock the database and do not require `DATABASE_URL`. Opt-in integration tests:
+## Phase 8 staging verification
+
+### Read-only remote MCP smoke
 
 ```powershell
-$env:RUN_DATABASE_INTEGRATION_TESTS="true"
-pnpm --filter @questoros-memory/database db:verify-vector
-Remove-Item Env:RUN_DATABASE_INTEGRATION_TESTS
+$env:RUN_PHASE8_REMOTE_MCP_SMOKE = "true"
+$env:QUESTOROS_MEMORY_REMOTE_MCP_URL = "https://blrt2ds22f.execute-api.ap-southeast-1.amazonaws.com/staging/mcp"
+
+pnpm.cmd --filter @questoros-memory/mcp-server smoke:phase8-remote
+
+Remove-Item Env:RUN_PHASE8_REMOTE_MCP_SMOKE -ErrorAction SilentlyContinue
+Remove-Item Env:QUESTOROS_MEMORY_REMOTE_MCP_URL -ErrorAction SilentlyContinue
 ```
 
-Documentation: [`authentication.md`](authentication.md), [`rest-api.md`](rest-api.md), [`mcp-server.md`](mcp-server.md), [`phase-3-verification.md`](phase-3-verification.md).
+### Full reproducible demonstration
 
-## Phase 2 quality tooling
+```powershell
+$env:RUN_PHASE8_DEMO = "true"
+$env:QUESTOROS_MEMORY_STAGING_URL = "https://blrt2ds22f.execute-api.ap-southeast-1.amazonaws.com/staging"
+$env:QUESTOROS_MEMORY_REMOTE_MCP_URL = "https://blrt2ds22f.execute-api.ap-southeast-1.amazonaws.com/staging/mcp"
 
-```bash
-# Lint all packages
-pnpm lint
+pnpm.cmd --filter @questoros-memory/mcp-server demo:phase8
 
-# Run tests with coverage
-pnpm test
-pnpm test:coverage
+Remove-Item Env:RUN_PHASE8_DEMO -ErrorAction SilentlyContinue
+Remove-Item Env:QUESTOROS_MEMORY_STAGING_URL -ErrorAction SilentlyContinue
+Remove-Item Env:QUESTOROS_MEMORY_REMOTE_MCP_URL -ErrorAction SilentlyContinue
 ```
 
-## Phase 2 database
+The demo creates only synthetic data, verifies cross-session retrieval and governance, performs exact cleanup, writes a sanitized report under `.acceptance/`, and copies the report to the Windows clipboard.
+
+## Database commands
 
 ```bash
 # Validate and generate Prisma client
 pnpm --filter @questoros-memory/database prisma:validate
 pnpm --filter @questoros-memory/database prisma:generate
 
-# Bootstrap the target database (creates DB only; does not create API keys)
+# Bootstrap target database
 pnpm --filter @questoros-memory/database db:bootstrap
 
-# Bootstrap local demo tenant/actor/API key into ignored .env
+# Bootstrap local demo tenant, actor, and API key into ignored .env
 pnpm --filter @questoros-memory/database auth:bootstrap-local -- --write-env
 
 # Apply migrations
@@ -82,11 +122,14 @@ pnpm --filter @questoros-memory/database db:migrate
 
 # Verify schema
 pnpm --filter @questoros-memory/database db:verify
+```
 
-# Verify vector contract (opt-in, connects to the database)
-$env:RUN_DATABASE_INTEGRATION_TESTS="true"
-pnpm --filter @questoros-memory/database db:verify-vector
-Remove-Item Env:RUN_DATABASE_INTEGRATION_TESTS
+Opt-in vector verification:
+
+```powershell
+$env:RUN_DATABASE_INTEGRATION_TESTS = "true"
+pnpm.cmd --filter @questoros-memory/database db:verify-vector
+Remove-Item Env:RUN_DATABASE_INTEGRATION_TESTS -ErrorAction SilentlyContinue
 ```
 
 ## CockroachDB Cloud Managed MCP in Cursor
@@ -95,57 +138,38 @@ Remove-Item Env:RUN_DATABASE_INTEGRATION_TESTS
 2. Replace `YOUR_COCKROACHDB_CLUSTER_ID` locally.
 3. Reload Cursor.
 4. Authenticate through CockroachDB OAuth.
-5. Grant **read-only** access only.
+5. Grant read-only access only.
 6. Never commit `.cursor/mcp.json`.
 
 The Managed MCP connection is for schema inspection, query diagnostics, retrieval verification, and index recommendations. Do not use it for migrations or data writes.
 
 The application SQL user and Managed MCP OAuth identity are separate access paths. Never place the SQL password in the MCP configuration.
 
-## MCP read-only verification results
+## Vector contract
 
-### Phase 2 — After migration
+The database includes:
 
-The `questoros_memory` database now contains all nine tables, ordinary indexes, and a CockroachDB vector index (`memory_embeddings_scope_cosine_idx`). All verification tests passed:
+- `vector(1024)` embedding storage;
+- `memory_embeddings_scope_cosine_idx` with `vector_cosine_ops`;
+- scope and lifecycle indexes for memories;
+- revision and audit tables; and
+- a synthetic cosine-distance verification that rolls back test data safely.
 
-- All nine tables confirmed: tenants, workspaces, projects, actors, source_artifacts, memories, memory_revisions, memory_embeddings, memory_audit_events.
-- Embedding column type: `vector(1024)`.
-- Ordinary indexes: memories_scope_lookup_idx, memories_actor_lookup_idx, memories_source_artifact_lookup_idx, memories_content_hash_idx, memory_embeddings_memory_idx, audit_events_tenant_created_idx.
-- Vector index: `memory_embeddings_scope_cosine_idx` with `vector_cosine_ops`.
-- Vector contract verified: synthetic cosine-distance query returns expected nearest memory. Transaction safely rolled back.
+## CI gates
 
-### Phase 1 — Pre-migration
+Every pull request must pass:
 
 ```text
-Databases: defaultdb
-Plan: Basic
-Cloud provider: AWS
-Region: ap-southeast-1
-CockroachDB version: 26.2.1
+install
+generate Prisma client
+package build
+format
+lint
+typecheck
+tests
+full build
+CDK synth
+AWS assembly verification
 ```
 
-## Phase 2 CI validation
-
-The initial CI run (ID 30005064915) failed during `actions/setup-node@v4` because Node.js 20 is end-of-life and pnpm 11.16.0 requires Node.js >= 22. All subsequent quality steps were skipped.
-
-After updating the workflow:
-
-- `actions/checkout` from `@v4` to `@v6`
-- `actions/setup-node` from `@v4` to `@v6` with `node-version: 24`
-- `pnpm/action-setup` from `@v4` to `@v6` with `cache: true`
-- Removed deprecated `cache: 'pnpm'` from `setup-node`
-- Removed Node.js 20 matrix strategy
-- Updated `package.json` engines to `>=22.0.0`
-- Added `.node-version` and `.nvmrc` (both `24`)
-
-All remote quality steps passed on run ID 30007566361:
-
-- Checkout ✅
-- Set up Node.js ✅
-- Set up pnpm ✅
-- Install dependencies ✅
-- Format check ✅
-- Lint ✅
-- Typecheck ✅
-- Test ✅
-- Build ✅
+Judge and submission material is listed in the repository README.
