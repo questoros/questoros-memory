@@ -1,4 +1,4 @@
-name: Phase 8 demo format artifact
+name: Phase 8 demo format fix
 
 on:
   pull_request:
@@ -9,13 +9,16 @@ on:
       - '.github/workflows/phase8-demo-format-fix.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  format-artifact:
+  format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: feat/phase-8-remote-mcp-demo
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -30,13 +33,15 @@ jobs:
             services/mcp-server/scripts/phase8-demo.ts \
             services/mcp-server/package.json \
             docs/phase-8-remote-mcp-demo.md
-      - name: Upload formatted files
-        uses: actions/upload-artifact@v4
-        with:
-          name: phase8-demo-formatted
-          path: |
-            services/mcp-server/scripts/phase8-demo.ts
-            services/mcp-server/package.json
-            docs/phase-8-remote-mcp-demo.md
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit exact formatter output
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No formatting changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add services/mcp-server/scripts/phase8-demo.ts services/mcp-server/package.json docs/phase-8-remote-mcp-demo.md
+          git commit -m 'fix(phase8): format reproducible demo harness'
+          git push origin HEAD:feat/phase-8-remote-mcp-demo
