@@ -176,9 +176,11 @@ The new hackathon work includes the standalone CockroachDB schema, distributed v
 
 See [`pre-existing-work.md`](pre-existing-work.md).
 
-## Private testing instructions template
+## Private testing instructions
 
-Paste the final generated private instructions into Devpost's testing field:
+Use [`private-judge-testing-template.md`](private-judge-testing-template.md) as the source for Devpost's private testing field. Never place the completed credential in this public file.
+
+The final private instructions must include:
 
 ```text
 Transport: MCP Streamable HTTP
@@ -189,23 +191,35 @@ Permissions: memory:read only
 Expected tools: questoros_memory_whoami, questoros_memory_get, questoros_memory_list, questoros_memory_search, questoros_memory_history
 Synthetic fixture memory ID: [PROVISIONED MEMORY ID]
 Credential expiry: [EXPIRY AFTER JUDGING]
-
-The credential cannot create, correct, delete, harvest, approve, reject, publish, administer, or access another project. Please do not publish the key.
 ```
 
 ## Final submission checklist
 
-- [ ] Public repository URL entered.
-- [ ] Apache License 2.0 visible on the repository page.
-- [ ] Functional MCP endpoint entered.
-- [ ] Temporary read-only judge key provisioned and placed only in private testing instructions.
-- [ ] Synthetic judge fixture provisioned.
-- [ ] Public video uploaded to YouTube or Vimeo.
-- [ ] Video duration is below three minutes.
-- [ ] Video visibly demonstrates the CockroachDB memory layer.
-- [ ] Video contains no secrets, private data, unauthorized music, or unrelated third-party marks.
-- [ ] CockroachDB tools and AWS services identified in the form.
-- [ ] Pre-existing work disclosed.
-- [ ] Architecture diagram included.
-- [ ] Submission tested from a clean external client.
-- [ ] Staging service scheduled to remain available through the judging period.
+### Repository-side complete
+
+- [x] Public repository URL prepared.
+- [x] Apache License 2.0 present.
+- [x] Functional MCP endpoint documented.
+- [x] CockroachDB tools and AWS services identified.
+- [x] Pre-existing work disclosed.
+- [x] Architecture diagram included.
+- [x] Reproducible cross-session demo passed.
+- [x] Exact cleanup and state restoration passed.
+- [x] Judge guide prepared.
+- [x] Private testing template prepared without secrets.
+- [x] Less-than-three-minute video script prepared.
+- [x] Final evidence review prepared.
+- [x] Full CI and CDK verification passed.
+
+### External actions remaining
+
+- [ ] Provision a temporary read-only judge key and place it only in private testing instructions.
+- [ ] Provision the stable synthetic judge fixture.
+- [ ] Record and upload the public YouTube or Vimeo video.
+- [ ] Replace the video placeholder above.
+- [ ] Test the completed submission from a signed-out browser and clean external MCP client.
+- [ ] Submit the Devpost form.
+- [ ] Keep staging available through judging.
+- [ ] Revoke the judge key and remove the fixture after judging.
+
+See [`final-submission-review.md`](final-submission-review.md) for the final gate and [`cost-and-cleanup.md`](cost-and-cleanup.md) for post-judging teardown.
