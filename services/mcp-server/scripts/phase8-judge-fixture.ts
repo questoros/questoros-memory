@@ -390,7 +390,10 @@ async function verifyReadOnlyAccess(state: State, key: string): Promise<void> {
     });
     assert(historyResult.isError !== true, 'Judge history failed.');
     const history = mcpJson(historyResult);
-    assert(Array.isArray(history) && history.length === 2, 'Judge history must have two revisions.');
+    assert(
+      Array.isArray(history) && history.length === 2,
+      'Judge history must have two revisions.',
+    );
 
     const deniedResult = await client.callTool({
       name: 'questoros_memory_list',
@@ -499,11 +502,14 @@ async function provision(key: string): Promise<void> {
   };
   const request = rest(key);
   const identity = asRecord(await request('/v1/whoami', { requestId: requestIds.create }));
-  const permissionList = Array.isArray(identity.permissions) ? identity.permissions.map(String) : [];
+  const permissionList = Array.isArray(identity.permissions)
+    ? identity.permissions.map(String)
+    : [];
   const required = ['memory:read', 'memory:write', 'memory:correct', 'memory:delete'];
   assert(
     required.every(
-      (permission) => permissionList.includes(permission) || permissionList.includes('memory:admin'),
+      (permission) =>
+        permissionList.includes(permission) || permissionList.includes('memory:admin'),
     ),
     `Provisioning key needs: ${required.join(', ')}.`,
   );
@@ -794,7 +800,9 @@ async function main(): Promise<void> {
 
 main()
   .catch((error: unknown) => {
-    const message = sanitize(error instanceof Error ? error.message : 'Unknown judge fixture failure.');
+    const message = sanitize(
+      error instanceof Error ? error.message : 'Unknown judge fixture failure.',
+    );
     process.stdout.write(
       `${JSON.stringify({
         status: 'failure',
