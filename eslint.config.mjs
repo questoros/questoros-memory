@@ -88,6 +88,7 @@ export default tseslint.config(
     files: [
       'packages/database/scripts/**/*.ts',
       'packages/*/scripts/**/*.{js,mjs,cjs,ts}',
+      'services/*/scripts/**/*.{js,mjs,cjs,ts}',
       'infra/*/scripts/**/*.{js,mjs,cjs,ts}',
       'infra/*/src/**/*.ts',
     ],
@@ -95,6 +96,15 @@ export default tseslint.config(
       globals: {
         ...globals.node,
       },
+    },
+  },
+
+  // The gated Phase 8 demo deliberately materializes sequential checkpoint
+  // variables so a partial run can persist state and still execute exact cleanup.
+  {
+    files: ['services/mcp-server/scripts/phase8-demo.ts'],
+    rules: {
+      'no-useless-assignment': 'off',
     },
   },
 

@@ -14,9 +14,10 @@
     "start": "node dist/cli.js"
   },
   "dependencies": {
+    "@questoros-memory/database": "workspace:*",
+    "@questoros-memory/mcp-server": "workspace:*",
     "@questoros-memory/memory-core": "workspace:*",
     "@questoros-memory/memory-service": "workspace:*",
-    "@questoros-memory/database": "workspace:*",
     "fastify": "^5.10.0"
   },
   "devDependencies": {

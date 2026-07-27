@@ -60,6 +60,16 @@ if (!handlerSource.includes('us.amazon.nova-micro-v1:0')) {
 if (!handlerSource.includes('untrusted source data')) {
   fail('reasoning prompt-injection boundary is missing from the Lambda asset.');
 }
+for (const requiredRemoteMarker of [
+  'questoros_memory_whoami',
+  'questoros_memory_history',
+  'Bearer authentication is required.',
+  'MCP_ORIGIN_DENIED',
+]) {
+  if (!handlerSource.includes(requiredRemoteMarker)) {
+    fail(`remote MCP deployment marker is missing from the Lambda asset: ${requiredRemoteMarker}.`);
+  }
+}
 
 const prismaPackage = path.join(assetDir, 'node_modules', '@prisma', 'client', 'package.json');
 const generatedClient = path.join(assetDir, 'node_modules', '.prisma', 'client');
@@ -93,7 +103,11 @@ const templateText = fs.readFileSync(templatePath, 'utf8');
 const template = JSON.parse(templateText);
 const resources = template.Resources ?? {};
 
-const applicationFunctions = resourcesOfType(resources, 'AWS::Lambda::Function').filter(
+const allFunctions = resourcesOfType(resources, 'AWS::Lambda::Function');
+if (allFunctions.length !== 1) {
+  fail(`expected the existing single staging Lambda function, found ${allFunctions.length}.`);
+}
+const applicationFunctions = allFunctions.filter(
   (resource) => resource?.Properties?.FunctionName === 'questoros-memory-staging-api',
 );
 if (applicationFunctions.length !== 1) {
@@ -157,6 +171,12 @@ if (variables.REASONING_MAX_OUTPUT_TOKENS !== '1024') {
 if (variables.REASONING_TIMEOUT_MS !== '7000') {
   fail('staging reasoning timeout is not 7,000 ms.');
 }
+if (variables.REMOTE_MCP_ENABLED !== 'true') {
+  fail('read-only remote MCP is not enabled for the reviewed staging package.');
+}
+if (variables.REMOTE_MCP_ALLOWED_ORIGINS !== '') {
+  fail('browser origins must remain denied until an exact HTTPS origin is explicitly reviewed.');
+}
 
 const iamPolicies = resourcesOfType(resources, 'AWS::IAM::Policy');
 const iamText = JSON.stringify(iamPolicies);
@@ -203,6 +223,19 @@ if (routeSettings.ThrottlingRateLimit !== 20 || routeSettings.ThrottlingBurstLim
   fail('HTTP API staging throttles are not 20 requests/second with burst 40.');
 }
 
+const routes = resourcesOfType(resources, 'AWS::ApiGatewayV2::Route');
+if (routes.length !== 2) {
+  fail(
+    `remote MCP must reuse the existing proxy route; expected two API routes, found ${routes.length}.`,
+  );
+}
+
+const outputs = template.Outputs ?? {};
+const remoteMcpOutput = outputs.RemoteMcpUrl?.Value;
+if (!remoteMcpOutput || !JSON.stringify(remoteMcpOutput).includes('/staging/mcp')) {
+  fail('RemoteMcpUrl output is missing or does not target /staging/mcp.');
+}
+
 const expectedAlarmNames = new Set([
   'questoros-memory-staging-lambda-errors',
   'questoros-memory-staging-lambda-throttles',
@@ -234,5 +267,5 @@ if (templateText.includes('qmem_live_') || templateText.includes('postgresql://'
 }
 
 console.log(
-  `AWS assembly verified: real handler, Prisma Lambda engine, secret reference, bounded US Nova Micro inference profile, profile-scoped multi-Region IAM, explicit 14-day logs, reduced-quota-safe concurrency, five actionless alarms, ${(totalBytes / 1024 / 1024).toFixed(2)} MiB unzipped.`,
+  `AWS assembly verified: single existing Lambda, Prisma runtime, secret reference, read-only remote MCP markers, browser origins denied, bounded US Nova Micro profile, profile-scoped multi-Region IAM, existing two API routes, explicit 14-day logs, reduced-quota-safe concurrency, five actionless alarms, ${(totalBytes / 1024 / 1024).toFixed(2)} MiB unzipped.`,
 );

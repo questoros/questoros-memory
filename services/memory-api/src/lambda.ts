@@ -1,4 +1,8 @@
 import type { FastifyInstance } from 'fastify';
+import {
+  createRemoteMcpWebRequestHandler,
+  type RemoteMcpWebRequestHandler,
+} from '@questoros-memory/mcp-server';
 import { buildApp } from './app.js';
 
 export interface ApiGatewayV2Event {
@@ -110,9 +114,7 @@ function responseHeaders(headers: Record<string, string | number | string[] | un
   let cookies: string[] | undefined;
 
   for (const [name, value] of Object.entries(headers)) {
-    if (value === undefined) {
-      continue;
-    }
+    if (value === undefined) continue;
     if (name.toLowerCase() === 'set-cookie') {
       cookies = Array.isArray(value) ? value.map(String) : [String(value)];
       continue;
@@ -121,6 +123,57 @@ function responseHeaders(headers: Record<string, string | number | string[] | un
   }
 
   return { headers: normalized, cookies };
+}
+
+function responseHeadersFromWeb(headers: Headers): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  for (const [name, value] of headers.entries()) {
+    normalized[name] = value;
+  }
+  return normalized;
+}
+
+function configuredRemoteMcpOrigins(value: string | undefined): string[] {
+  if (!value?.trim()) return [];
+  return value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .map((origin) => {
+      let parsed: URL;
+      try {
+        parsed = new URL(origin);
+      } catch {
+        throw new Error('REMOTE_MCP_ALLOWED_ORIGINS contains an invalid origin.');
+      }
+      if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== origin) {
+        throw new Error('REMOTE_MCP_ALLOWED_ORIGINS must contain exact HTTP or HTTPS origins.');
+      }
+      return origin;
+    });
+}
+
+function webRequestForEvent(
+  event: ApiGatewayV2Event,
+  method: SupportedMethod,
+  url: string,
+  payload: string | Buffer | undefined,
+): Request {
+  const body = method === 'GET' || method === 'HEAD' ? undefined : payload;
+  return new Request(`https://lambda.questoros-memory.invalid${url}`, {
+    method,
+    headers: requestHeaders(event),
+    body,
+  });
+}
+
+async function webResponseToApiGateway(response: Response): Promise<ApiGatewayV2Result> {
+  return {
+    statusCode: response.status,
+    headers: responseHeadersFromWeb(response.headers),
+    body: await response.text(),
+    isBase64Encoded: false,
+  };
 }
 
 function parseDatabaseUrl(secretString: string): string {
@@ -178,9 +231,7 @@ export async function initializeLambdaRuntime(
   options: RuntimeInitializationOptions = {},
 ): Promise<void> {
   const env = options.env ?? process.env;
-  if (env.DATABASE_URL?.trim()) {
-    return;
-  }
+  if (env.DATABASE_URL?.trim()) return;
 
   const secretId = env.DATABASE_SECRET_ID?.trim();
   const sessionToken = env.AWS_SESSION_TOKEN?.trim();
@@ -226,6 +277,9 @@ export async function initializeLambdaRuntime(
 export interface LambdaHandlerOptions {
   build?: () => Promise<FastifyInstance>;
   initialize?: () => Promise<void>;
+  remoteMcpEnabled?: boolean;
+  remoteMcpHandler?: RemoteMcpWebRequestHandler;
+  remoteMcpAllowedOrigins?: readonly string[];
 }
 
 function runtimeUnavailable(requestId?: string): ApiGatewayV2Result {
@@ -244,12 +298,33 @@ function runtimeUnavailable(requestId?: string): ApiGatewayV2Result {
 
 /**
  * Create an API Gateway HTTP API v2 Lambda handler around the existing Fastify app.
- * The Fastify instance is initialized once per warm Lambda execution environment.
+ * REST requests use Fastify injection. Remote MCP requests use the SDK's Web
+ * Standards transport directly because API Gateway events are not real Node
+ * IncomingMessage/ServerResponse streams.
  */
 export function createLambdaHandler(options: LambdaHandlerOptions = {}) {
   const appBuilder =
     options.build ?? (() => buildApp({ logLevel: process.env.LOG_LEVEL ?? 'info' }));
   const initialize = options.initialize ?? initializeLambdaRuntime;
+  const remoteMcpEnabled = options.remoteMcpEnabled ?? process.env.REMOTE_MCP_ENABLED === 'true';
+  const remoteMcpHandler =
+    options.remoteMcpHandler ??
+    createRemoteMcpWebRequestHandler({
+      routePath: '/mcp',
+      allowedOrigins:
+        options.remoteMcpAllowedOrigins ??
+        (remoteMcpEnabled
+          ? configuredRemoteMcpOrigins(process.env.REMOTE_MCP_ALLOWED_ORIGINS)
+          : []),
+      onDiagnostic: (diagnostic) => {
+        console.warn('Remote MCP diagnostic', {
+          event: diagnostic.event,
+          requestId: diagnostic.requestId,
+          code: diagnostic.code,
+          httpStatus: diagnostic.httpStatus,
+        });
+      },
+    });
   let appPromise: Promise<FastifyInstance> | null = null;
 
   return async function lambdaHandler(event: ApiGatewayV2Event): Promise<ApiGatewayV2Result> {
@@ -293,6 +368,36 @@ export function createLambdaHandler(options: LambdaHandlerOptions = {}) {
     } catch {
       console.error('Memory API runtime initialization failed.');
       return runtimeUnavailable(event.requestContext.requestId);
+    }
+
+    if (remoteMcpEnabled && path === '/mcp') {
+      try {
+        const response = await remoteMcpHandler(webRequestForEvent(event, method, url, payload));
+        return webResponseToApiGateway(response);
+      } catch {
+        console.error('Remote MCP Lambda adapter failed.');
+        return {
+          statusCode: 500,
+          headers: {
+            'content-type': 'application/json; charset=utf-8',
+            'cache-control': 'no-store',
+            'x-content-type-options': 'nosniff',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32603,
+              message: 'MCP request failed.',
+              data: {
+                code: 'MCP_TRANSPORT_ERROR',
+                requestId: event.requestContext.requestId ?? null,
+              },
+            },
+            id: null,
+          }),
+          isBase64Encoded: false,
+        };
+      }
     }
 
     const response = await app.inject({
