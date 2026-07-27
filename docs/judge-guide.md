@@ -2,6 +2,10 @@
 
 This guide provides the fastest safe path for evaluating QuestorOS Memory without exposing database credentials or enabling remote writes.
 
+## Official judging window
+
+The official judging period runs from August 19, 2026 at 10:00 AM Eastern Time through September 15, 2026 at 5:00 PM Eastern Time. Winners are expected on or around September 21, 2026. The temporary read-only judge credential expires on September 22, 2026 at 23:59:59 UTC.
+
 ## One-minute overview
 
 QuestorOS Memory is a governed persistent-memory service for AI agents. CockroachDB is the system of record for scoped memories, immutable revisions, provenance, audit events, vectors, source artifacts, harvest runs, and pending proposal candidates.
