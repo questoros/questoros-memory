@@ -4,21 +4,21 @@ This document is the final repository-side review for the CockroachDB × AWS Hac
 
 ## Technical completion status
 
-| Area | Status | Evidence |
-| --- | --- | --- |
-| CockroachDB organizational-memory schema | Complete | tenants, workspaces, projects, actors, memories, immutable revisions, audit events, vectors, source artifacts, harvest runs, and proposal candidates |
-| Distributed Vector Indexing | Complete | 1,024-dimensional vectors and `memory_embeddings_scope_cosine_idx` using cosine operators |
-| CockroachDB Cloud Managed MCP usage | Complete | separate read-only administrative inspection and diagnostics connection |
-| Shared authorization and governance layer | Complete | REST and MCP both call `@questoros-memory/memory-service` |
-| AWS staging deployment | Complete | API Gateway, Lambda, S3, CloudWatch, IAM, Budgets, and CDK verification |
-| Amazon Bedrock reasoning | Complete | bounded Nova Micro structured extraction through `us.amazon.nova-micro-v1:0` |
-| Remote MCP | Complete | authenticated stateless Streamable HTTP with an exact five-tool read-only allowlist |
-| Cross-session persistence proof | Complete | separate sessions proved list, search, get, correction, and history |
-| Scope isolation | Complete | cross-project request denied in the live Phase 8D run |
-| Governance proof | Complete | one harvest candidate, zero automatic authoritative writes, zero approval/rejection/publication actions |
-| Exact cleanup | Complete | synthetic authoritative and proposal records removed and original active-memory set restored |
-| CI | Complete | formatting, lint, typecheck, tests, build, CDK synthesis, and assembly verification passed |
-| Public documentation | Complete | README, architecture, security, judge guide, Devpost draft, cost/cleanup, prior-work disclosure, and video script |
+| Area                                      | Status   | Evidence                                                                                                                                             |
+| ----------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CockroachDB organizational-memory schema  | Complete | tenants, workspaces, projects, actors, memories, immutable revisions, audit events, vectors, source artifacts, harvest runs, and proposal candidates |
+| Distributed Vector Indexing               | Complete | 1,024-dimensional vectors and `memory_embeddings_scope_cosine_idx` using cosine operators                                                            |
+| CockroachDB Cloud Managed MCP usage       | Complete | separate read-only administrative inspection and diagnostics connection                                                                              |
+| Shared authorization and governance layer | Complete | REST and MCP both call `@questoros-memory/memory-service`                                                                                            |
+| AWS staging deployment                    | Complete | API Gateway, Lambda, S3, CloudWatch, IAM, Budgets, and CDK verification                                                                              |
+| Amazon Bedrock reasoning                  | Complete | bounded Nova Micro structured extraction through `us.amazon.nova-micro-v1:0`                                                                         |
+| Remote MCP                                | Complete | authenticated stateless Streamable HTTP with an exact five-tool read-only allowlist                                                                  |
+| Cross-session persistence proof           | Complete | separate sessions proved list, search, get, correction, and history                                                                                  |
+| Scope isolation                           | Complete | cross-project request denied in the live Phase 8D run                                                                                                |
+| Governance proof                          | Complete | one harvest candidate, zero automatic authoritative writes, zero approval/rejection/publication actions                                              |
+| Exact cleanup                             | Complete | synthetic authoritative and proposal records removed and original active-memory set restored                                                         |
+| CI                                        | Complete | formatting, lint, typecheck, tests, build, CDK synthesis, and assembly verification passed                                                           |
+| Public documentation                      | Complete | README, architecture, security, judge guide, Devpost draft, cost/cleanup, prior-work disclosure, and video script                                    |
 
 ## Live evidence summary
 
