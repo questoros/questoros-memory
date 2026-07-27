@@ -4,9 +4,9 @@ QuestorOS Memory exposes controlled memory operations through MCP without granti
 
 ## Transport status
 
-| Transport | Status | Intended use |
-| --- | --- | --- |
-| stdio | Implemented | Local customer-facing MCP clients |
+| Transport       | Status                           | Intended use                       |
+| --------------- | -------------------------------- | ---------------------------------- |
+| stdio           | Implemented                      | Local customer-facing MCP clients  |
 | Streamable HTTP | Deployed and live in AWS staging | Authenticated remote read-only MCP |
 
 The CockroachDB Cloud Managed MCP Server remains a separate, read-only administrative tool. It is not the customer-facing QuestorOS Memory MCP server.
@@ -103,13 +103,13 @@ The handler also:
 
 The deployed remote version registers exactly these five tools:
 
-| Tool | Mutates data | Description |
-| --- | --- | --- |
-| `questoros_memory_whoami` | No | Authenticated identity, permissions, and credential scope |
-| `questoros_memory_get` | No | Retrieve one scoped memory |
-| `questoros_memory_list` | No | List scoped memories with supported filters |
-| `questoros_memory_search` | No | Explainable scoped memory search |
-| `questoros_memory_history` | No | Retrieve revision history for one scoped memory |
+| Tool                       | Mutates data | Description                                               |
+| -------------------------- | ------------ | --------------------------------------------------------- |
+| `questoros_memory_whoami`  | No           | Authenticated identity, permissions, and credential scope |
+| `questoros_memory_get`     | No           | Retrieve one scoped memory                                |
+| `questoros_memory_list`    | No           | List scoped memories with supported filters               |
+| `questoros_memory_search`  | No           | Explainable scoped memory search                          |
+| `questoros_memory_history` | No           | Retrieve revision history for one scoped memory           |
 
 The immutable allowlist is exported as `REMOTE_MCP_READ_ONLY_TOOL_NAMES` from `services/mcp-server/src/remote-tools.ts`.
 
@@ -158,24 +158,24 @@ The commands load private values from the ignored local environment and produce 
 
 Successful tools return structured JSON in MCP text content blocks. Expected failures return safe `Error [CODE]: message` tool results or sanitized JSON-RPC errors.
 
-| Channel | Allowed content |
-| --- | --- |
-| MCP protocol response | Tool data and sanitized errors only |
+| Channel                       | Allowed content                                             |
+| ----------------------------- | ----------------------------------------------------------- |
+| MCP protocol response         | Tool data and sanitized errors only                         |
 | stderr or diagnostic callback | Sanitized event, request ID, code, and optional HTTP status |
 
 Never print API keys, `DATABASE_URL`, connection strings, raw request headers, source content, model output, or private chain-of-thought to protocol output or diagnostics.
 
 ## Troubleshooting
 
-| Symptom | Likely cause |
-| --- | --- |
-| `AUTH_REQUIRED` / `AUTH_INVALID` | Missing or wrong bearer key |
-| `AUTH_REVOKED` / `AUTH_EXPIRED` | Key is no longer active |
-| `SCOPE_DENIED` | Credential scope is narrower than the requested memory |
-| `PERMISSION_DENIED` | Key lacks the required read permission |
-| `VALIDATION_ERROR` | Tool input failed the shared contract |
-| `MCP_ORIGIN_DENIED` | Browser origin is not explicitly allowlisted |
-| `MCP_METHOD_NOT_ALLOWED` | Unsupported HTTP method for stateless remote MCP |
-| `MCP_TRANSPORT_ERROR` | Sanitized MCP transport failure |
+| Symptom                          | Likely cause                                           |
+| -------------------------------- | ------------------------------------------------------ |
+| `AUTH_REQUIRED` / `AUTH_INVALID` | Missing or wrong bearer key                            |
+| `AUTH_REVOKED` / `AUTH_EXPIRED`  | Key is no longer active                                |
+| `SCOPE_DENIED`                   | Credential scope is narrower than the requested memory |
+| `PERMISSION_DENIED`              | Key lacks the required read permission                 |
+| `VALIDATION_ERROR`               | Tool input failed the shared contract                  |
+| `MCP_ORIGIN_DENIED`              | Browser origin is not explicitly allowlisted           |
+| `MCP_METHOD_NOT_ALLOWED`         | Unsupported HTTP method for stateless remote MCP       |
+| `MCP_TRANSPORT_ERROR`            | Sanitized MCP transport failure                        |
 
 Judge instructions: [`judge-guide.md`](judge-guide.md).
