@@ -1,0 +1,85 @@
+name: Phase 8E format fix
+
+on:
+  push:
+    branches:
+      - feat/phase-8-remote-mcp-demo
+    paths:
+      - 'README.md'
+      - '.env.example'
+      - 'docs/architecture.md'
+      - 'docs/cost-and-cleanup.md'
+      - 'docs/development.md'
+      - 'docs/devpost-submission.md'
+      - 'docs/judge-guide.md'
+      - 'docs/mcp-server.md'
+      - 'docs/phase-8-remote-mcp-demo.md'
+      - 'docs/pre-existing-work.md'
+      - 'docs/video-script.md'
+      - 'services/mcp-server/package.json'
+      - 'services/mcp-server/scripts/phase8-judge-fixture.ts'
+      - '.github/workflows/phase8e-format-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/phase-8-remote-mcp-demo
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.16.0
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @questoros-memory/database prisma:generate
+      - name: Format Phase 8E files
+        run: |
+          pnpm exec prettier --write \
+            README.md \
+            .env.example \
+            docs/architecture.md \
+            docs/cost-and-cleanup.md \
+            docs/development.md \
+            docs/devpost-submission.md \
+            docs/judge-guide.md \
+            docs/mcp-server.md \
+            docs/phase-8-remote-mcp-demo.md \
+            docs/pre-existing-work.md \
+            docs/video-script.md \
+            services/mcp-server/package.json \
+            services/mcp-server/scripts/phase8-judge-fixture.ts
+          pnpm exec eslint services/mcp-server/scripts/phase8-judge-fixture.ts --fix
+          pnpm exec prettier --write services/mcp-server/scripts/phase8-judge-fixture.ts
+      - name: Commit exact formatter output
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No formatting changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            README.md \
+            .env.example \
+            docs/architecture.md \
+            docs/cost-and-cleanup.md \
+            docs/development.md \
+            docs/devpost-submission.md \
+            docs/judge-guide.md \
+            docs/mcp-server.md \
+            docs/phase-8-remote-mcp-demo.md \
+            docs/pre-existing-work.md \
+            docs/video-script.md \
+            services/mcp-server/package.json \
+            services/mcp-server/scripts/phase8-judge-fixture.ts
+          git commit -m 'fix(phase8): format final submission package'
+          git push origin HEAD:feat/phase-8-remote-mcp-demo
