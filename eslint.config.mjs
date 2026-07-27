@@ -99,6 +99,15 @@ export default tseslint.config(
     },
   },
 
+  // The gated Phase 8 demo deliberately materializes sequential checkpoint
+  // variables so a partial run can persist state and still execute exact cleanup.
+  {
+    files: ['services/mcp-server/scripts/phase8-demo.ts'],
+    rules: {
+      'no-useless-assignment': 'off',
+    },
+  },
+
   // Limit to zero warnings
   {
     rules: {
