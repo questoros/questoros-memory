@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 jobs:
-  format-artifact:
+  diagnose-format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -34,41 +34,12 @@ jobs:
           version: 11.16.0
           run_install: false
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @questoros-memory/database prisma:generate
-      - name: Format Phase 8E files
-        run: |
-          pnpm exec prettier --write \
-            README.md \
-            .env.example \
-            docs/architecture.md \
-            docs/cost-and-cleanup.md \
-            docs/development.md \
-            docs/devpost-submission.md \
-            docs/judge-guide.md \
-            docs/mcp-server.md \
-            docs/phase-8-remote-mcp-demo.md \
-            docs/pre-existing-work.md \
-            docs/video-script.md \
-            services/mcp-server/package.json \
-            services/mcp-server/scripts/phase8-judge-fixture.ts
-          git diff --name-only > phase8e-formatted-changed.txt
+      - name: Capture formatter diagnostics
+        continue-on-error: true
+        run: pnpm exec prettier --check services/mcp-server/scripts/phase8-judge-fixture.ts 2>&1 | tee phase8e-prettier.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: phase8e-formatted
-          path: |
-            README.md
-            .env.example
-            docs/architecture.md
-            docs/cost-and-cleanup.md
-            docs/development.md
-            docs/devpost-submission.md
-            docs/judge-guide.md
-            docs/mcp-server.md
-            docs/phase-8-remote-mcp-demo.md
-            docs/pre-existing-work.md
-            docs/video-script.md
-            services/mcp-server/package.json
-            services/mcp-server/scripts/phase8-judge-fixture.ts
-            phase8e-formatted-changed.txt
+          name: phase8e-format-diagnostics
+          path: phase8e-prettier.txt
           if-no-files-found: error
           retention-days: 1
