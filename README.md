@@ -2,40 +2,57 @@
 
 **ICARE³™ — Agentic Persistent Memory for Organizational Intelligence**
 
-> ICARE³ gives organizations agentic memory that preserves reasoning, decisions, actions, and outcomes—so every AI interaction improves the next.
+> QuestorOS Memory preserves organizational reasoning, decisions, actions, outcomes, revisions, and provenance so separate AI sessions can build on trusted context instead of starting over.
 
-QuestorOS Memory is a portable, explainable, user-controlled memory layer for AI agents, accessible through REST and MCP interfaces.
+QuestorOS Memory is a portable, explainable, user-controlled memory layer for AI agents. It exposes authenticated REST and MCP interfaces over one shared authorization and governance service.
 
-> Hackathon staging MVP. The service is deployed for controlled testing but is not production-ready.
+> Hackathon staging MVP. The service is deployed for controlled judging and testing but is not represented as production-ready.
 
-## Current implementation status
+## Why this exists
 
-The merged Phase 7 baseline includes:
+Organizations increasingly use multiple AI assistants, but the reasoning created in those interactions is usually fragmented across people, chats, vendors, and sessions. Traditional document storage preserves files; it does not preserve governed agent memory with scope, history, provenance, retrieval explanations, and explicit human review boundaries.
+
+QuestorOS Memory turns that missing layer into a standalone service that can support QuestorOS and third-party AI clients without replacing the client, model, or workflow system already in use.
+
+## Live status
+
+Phase 8A–8D are complete:
 
 - CockroachDB-backed organizational memory and native vector retrieval;
 - tenant, workspace, and project authorization boundaries;
-- authenticated REST APIs deployed to AWS staging in Singapore (`ap-southeast-1`);
-- Amazon Bedrock reasoning through the US Nova Micro cross-Region inference profile;
-- proposal-only governed harvesting with human-review boundaries;
-- strict structured-output validation, sanitized errors, and bounded model usage;
-- a local customer-facing MCP stdio server over the shared memory-service layer; and
+- authenticated REST deployed through AWS API Gateway and Lambda;
+- authenticated stateless remote MCP through the same Lambda and service layer;
+- Amazon Bedrock reasoning with Nova Micro;
+- proposal-only governed harvesting with zero automatic authoritative writes;
+- correction history, provenance, explainable retrieval, soft deletion, and audit events;
+- an immutable five-tool remote read-only allowlist;
+- live cross-session retrieval, correction, history, isolation, governance, and exact cleanup proof; and
 - a $5 monthly AWS staging budget with no provisioned Bedrock throughput.
 
-A live governed-harvest test completed successfully with one pending proposal candidate and zero authoritative-memory writes.
+Remote MCP endpoint:
 
-## Phase 8 — Remote MCP and demo readiness
+```text
+https://blrt2ds22f.execute-api.ap-southeast-1.amazonaws.com/staging/mcp
+```
 
-Phase 8 converts the validated staging MVP into a judge-ready external integration:
+The endpoint requires a private project-scoped bearer key. A temporary read-only judge credential will be supplied only through private Devpost testing instructions, never committed to this repository.
 
-1. correct public documentation and architecture status;
-2. add an authenticated remote MCP transport without raw database access;
-3. verify an external AI client can retrieve through the same authorization layer;
-4. provide a reproducible synthetic end-to-end demonstration; and
-5. finalize security, disclosure, setup, and judging documentation.
+## What the live demonstration proved
 
-The Phase 8 branch contains a tested stateless Streamable HTTP MCP transport with bearer-key authentication and an immutable five-tool read-only allowlist. It also contains the smallest staging integration: the existing API Lambda and existing proxy route serve `/staging/mcp`; no second Lambda, API, database, IAM policy, or provisioned service is added. The integration has passed automated synthesis and assembly verification but has not been deployed. A live `cdk diff` review and explicit deployment approval remain required.
+The Phase 8D synthetic demonstration completed successfully across three independent client sessions:
 
-Initial remote tools:
+1. Session 1 created one synthetic authoritative project memory through authenticated REST.
+2. Session 2 retrieved it through remote MCP `list`, explainable `search`, and `get`.
+3. A controlled REST correction created immutable revision 2.
+4. Session 3 retrieved the corrected content and both revisions through remote MCP.
+5. Cross-project access was denied.
+6. A non-allowlisted remote write remained blocked.
+7. One bounded Bedrock harvest produced one pending proposal and changed no authoritative memory.
+8. All demo-created records were removed and the original active-memory set was restored exactly.
+
+No customer data, private QuestorOS data, API key, database URL, AWS credential, raw model output, or private chain-of-thought was included in the demo report.
+
+## Exact remote MCP allowlist
 
 ```text
 questoros_memory_whoami
@@ -45,7 +62,68 @@ questoros_memory_search
 questoros_memory_history
 ```
 
-See [`docs/phase-8-remote-mcp-demo.md`](docs/phase-8-remote-mcp-demo.md) and [`docs/mcp-server.md`](docs/mcp-server.md).
+The remote endpoint does not expose create, correct, delete, embedding mutation, harvest, candidate review, publication, synchronization, SQL, or administrative tools.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Client[QuestorOS or third-party AI client]
+    Local[Local MCP stdio]
+    Gateway[AWS API Gateway]
+    Lambda[AWS Lambda\nREST + remote MCP]
+    Service[Shared memory-service]
+    Auth[Authentication\npermissions\nscope\naudit]
+    CRDB[(CockroachDB\nmemories + revisions + vectors)]
+    Bedrock[Amazon Bedrock\nNova Micro]
+    S3[Amazon S3\nsource artifacts]
+
+    Client --> Local
+    Client --> Gateway
+    Gateway --> Lambda
+    Local --> Service
+    Lambda --> Service
+    Service --> Auth
+    Auth --> CRDB
+    Service --> Bedrock
+    Service --> S3
+```
+
+REST and MCP call `@questoros-memory/memory-service`. Transport code does not duplicate business rules or access Prisma directly.
+
+See [`docs/architecture.md`](docs/architecture.md).
+
+## CockroachDB tools used
+
+The submission uses at least two required CockroachDB capabilities meaningfully:
+
+### 1. CockroachDB Distributed Vector Indexing
+
+- `vector(1024)` embeddings are stored beside scoped memory records.
+- `memory_embeddings_scope_cosine_idx` uses `vector_cosine_ops`.
+- retrieval combines authorization filters, explainable scoring, metadata, and vector similarity;
+- vector verification uses synthetic nearest-neighbor checks and rolls test data back safely.
+
+### 2. CockroachDB Cloud Managed MCP Server
+
+- used as a separate read-only administrative development connection;
+- verifies schema, tables, indexes, retrieval behavior, and operational recommendations;
+- never acts as the customer-facing product interface;
+- never receives the application SQL password or write permission.
+
+The customer-facing QuestorOS Memory MCP server is a separate controlled product layer over `memory-service`, not a raw database MCP connection.
+
+## AWS services used
+
+- **AWS Lambda** — serverless REST, remote MCP, and governed-harvest execution.
+- **Amazon API Gateway** — HTTPS staging ingress and throttling.
+- **Amazon Bedrock** — bounded structured reasoning through `us.amazon.nova-micro-v1:0`.
+- **Amazon S3** — bounded source-artifact storage for governed harvesting.
+- **Amazon CloudWatch** — operational logs, request correlation, and alarms.
+- **AWS IAM** — least-privilege runtime access with no wildcard Bedrock permissions.
+- **AWS Budgets** — $5 monthly staging budget boundary.
+
+The AWS stack is deployed in Singapore (`ap-southeast-1`). The Bedrock reasoning client runs in `us-west-2` using the approved US cross-Region inference profile.
 
 ## ICARE³ reasoning lifecycle
 
@@ -53,93 +131,70 @@ Public lifecycle:
 
 > **Issue → Context → Analysis → Recommendations → Evaluation → Execution → Evaluation**
 
-Internally, the two Evaluation stages are distinguished as `RECOMMENDATION_EVALUATION` (assess recommendations before action) and `EXECUTION_EVALUATION` (measure execution, outcomes, evidence, and lessons learned).
+Internally, the two Evaluation stages are distinguished as `RECOMMENDATION_EVALUATION` and `EXECUTION_EVALUATION`.
 
-## Core product path
+## Governance model
 
 ```text
-QuestorOS or third-party AI client
-                |
-                v
-Customer-facing MCP / authenticated REST API
-                |
-                v
-@questoros-memory/memory-service
-                |
-                v
-Authentication, authorization, scope enforcement, audit
-                |
-                v
-CockroachDB memory, revision, provenance, and vector storage
-                |
-                +----> Amazon Bedrock reasoning
-                |
-                +----> Amazon S3 source artifacts
+Authorized source
+      |
+      v
+Untrusted source artifact
+      |
+      v
+Bedrock structured extraction
+      |
+      v
+Strict JSON + Zod validation
+      |
+      v
+PENDING proposal candidates
+      |
+      v
+Explicit human review boundary
+      |
+      +--> approve through governed action
+      +--> reject through governed action
 ```
 
-REST and MCP transports use the shared `memory-service` layer. They do not duplicate business rules or access Prisma directly.
+The model cannot approve, publish, correct, delete, or directly create authoritative memory.
 
-## MVP capabilities
+## Quick local validation
 
-The current staging MVP demonstrates:
+Requirements:
 
-1. storing meaningful organizational memory;
-2. retrieving it in a later session;
-3. CockroachDB vector retrieval;
-4. tenant, workspace, and project authorization filters;
-5. retrieval explanations and provenance;
-6. correction, revision history, and soft deletion;
-7. local access through the customer-facing MCP server; and
-8. live Bedrock-assisted harvesting that creates proposals without silently changing authoritative memory.
-
-The Phase 8 branch additionally demonstrates authenticated remote MCP protocol integration through the official Streamable HTTP client without enabling remote write tools.
-
-## Two distinct MCP layers
-
-### CockroachDB Cloud Managed MCP Server
-
-Used for read-only schema inspection, diagnostics, retrieval verification, and index recommendations. It is an administrative development tool and must not be treated as the customer product.
-
-### QuestorOS Memory MCP Server
-
-The customer-facing server exposes controlled memory operations without raw SQL or unrestricted database access. The merged baseline uses stdio locally. The Phase 8 branch adds an authenticated stateless Streamable HTTP transport over the same service and authorization boundaries; staging deployment remains pending explicit approval.
-
-See [`docs/mcp-server.md`](docs/mcp-server.md), [`docs/rest-api.md`](docs/rest-api.md), and [`docs/architecture.md`](docs/architecture.md).
-
-## Repository status and disclosure
-
-This repository contains new hackathon work for the standalone **QuestorOS Memory: Agentic Memory as a Service** project (ICARE³™).
-
-The broader QuestorOS product existed before the hackathon and already included internal memory concepts and functionality. The standalone CockroachDB/AWS/MCP memory service and its portable developer interfaces are the hackathon implementation. Reused work must be identified and disclosed in [`docs/pre-existing-work.md`](docs/pre-existing-work.md).
-
-## Infrastructure
-
-- CockroachDB Basic on AWS Singapore;
-- AWS staging stack in Singapore (`ap-southeast-1`);
-- Bedrock reasoning client in `us-west-2` using `us.amazon.nova-micro-v1:0`;
-- proposal-only governed harvesting;
-- Apache License 2.0.
-
-## Setup
+- Node.js 24 LTS recommended;
+- pnpm 11;
+- a CockroachDB connection only for opt-in integration and demo operations;
+- private credentials stored in ignored local files only.
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm lint
 pnpm test
 pnpm build
 ```
 
-See [`docs/development.md`](docs/development.md) for full local setup instructions.
+Full local setup: [`docs/development.md`](docs/development.md).
 
-## Architecture
+## Judge and submission material
 
-See [`docs/architecture.md`](docs/architecture.md), [`docs/authentication.md`](docs/authentication.md), and [`docs/retrieval.md`](docs/retrieval.md).
+- [`docs/judge-guide.md`](docs/judge-guide.md) — fastest evaluation path and private test-key handling.
+- [`docs/devpost-submission.md`](docs/devpost-submission.md) — copy-ready submission description.
+- [`docs/video-script.md`](docs/video-script.md) — less-than-three-minute recording plan.
+- [`docs/cost-and-cleanup.md`](docs/cost-and-cleanup.md) — cost boundaries and post-judging teardown.
+- [`docs/phase-8-remote-mcp-demo.md`](docs/phase-8-remote-mcp-demo.md) — reproducible setup, verification, and cleanup.
+- [`docs/pre-existing-work.md`](docs/pre-existing-work.md) — required prior-work disclosure.
 
 ## Security
 
 Read [`SECURITY.md`](SECURITY.md), [`docs/security.md`](docs/security.md), and [`docs/threat-model.md`](docs/threat-model.md) before connecting credentials or external tools.
 
-## License
+Key controls include bearer authentication before MCP initialization, project-scoped authorization, deny-by-default browser origins, sanitized errors, request IDs, no-store responses, a remote read-only allowlist, proposal-only model output, least-privilege IAM, and exact synthetic cleanup.
+
+## Repository and license
+
+This is the standalone hackathon implementation of **QuestorOS Memory: Agentic Memory as a Service**. The broader QuestorOS product and earlier internal memory concepts predate the hackathon and are disclosed separately. This repository does not contain or deploy the broader QuestorOS application.
 
 Licensed under the [Apache License 2.0](LICENSE).
