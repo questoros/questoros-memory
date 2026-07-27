@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: feat/phase-8-remote-mcp-demo
+          ref: 431c987de102bce12bf2538b2882cd6a65459a8e
           fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
