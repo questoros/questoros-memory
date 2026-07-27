@@ -51,8 +51,7 @@ jobs:
             docs/video-script.md \
             services/mcp-server/package.json \
             services/mcp-server/scripts/phase8-judge-fixture.ts
-          pnpm exec eslint services/mcp-server/scripts/phase8-judge-fixture.ts --fix
-          pnpm exec prettier --write services/mcp-server/scripts/phase8-judge-fixture.ts
+          git diff --name-only > phase8e-formatted-changed.txt
       - uses: actions/upload-artifact@v4
         with:
           name: phase8e-formatted
@@ -70,5 +69,6 @@ jobs:
             docs/video-script.md
             services/mcp-server/package.json
             services/mcp-server/scripts/phase8-judge-fixture.ts
+            phase8e-formatted-changed.txt
           if-no-files-found: error
           retention-days: 1
