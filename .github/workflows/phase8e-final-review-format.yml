@@ -27,7 +27,8 @@ jobs:
           version: 11.16.0
           run_install: false
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec prettier --write docs/final-submission-review.md
+      - name: Format the final evidence review
+        run: pnpm exec prettier --write docs/final-submission-review.md
       - name: Commit exact formatter output
         shell: bash
         run: |
