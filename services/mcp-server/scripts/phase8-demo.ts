@@ -8,8 +8,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { disconnectDatabaseClient, getDatabaseClient } from '@questoros-memory/database';
 
-const APPROVED_API_URL =
-  'https://blrt2ds22f.execute-api.ap-southeast-1.amazonaws.com/staging';
+const APPROVED_API_URL = 'https://blrt2ds22f.execute-api.ap-southeast-1.amazonaws.com/staging';
 const APPROVED_MCP_URL = `${APPROVED_API_URL}/mcp`;
 const GATE = 'RUN_PHASE8_DEMO';
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -210,7 +209,10 @@ async function readState(): Promise<DemoState> {
 
 async function writeState(state: DemoState): Promise<void> {
   await mkdir(acceptanceDirectory, { recursive: true });
-  await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
 }
 
 function scopeQuery(scope: CredentialScope): string {
@@ -284,7 +286,10 @@ async function verifyDatabaseMatchesTenant(tenantId: string): Promise<void> {
   const rows = await prisma.$queryRaw<Array<{ id: string }>>`
     SELECT id FROM tenants WHERE id = ${tenantId}::uuid LIMIT 1
   `;
-  assert(rows.length === 1, 'Local DATABASE_URL does not contain the authenticated staging tenant.');
+  assert(
+    rows.length === 1,
+    'Local DATABASE_URL does not contain the authenticated staging tenant.',
+  );
 }
 
 async function setup(apiUrl: string, mcpUrl: string, apiKey: string): Promise<DemoState> {
@@ -378,7 +383,10 @@ async function setup(apiUrl: string, mcpUrl: string, apiKey: string): Promise<De
   });
   const afterIds = memoryIds(afterPayload);
   assert(afterIds.includes(memoryId), 'Seeded memory is not visible through REST list.');
-  assert(afterIds.length === beforeMemoryIds.length + 1, 'Setup created an unexpected memory count.');
+  assert(
+    afterIds.length === beforeMemoryIds.length + 1,
+    'Setup created an unexpected memory count.',
+  );
 
   const state: DemoState = {
     version: 1,
@@ -458,7 +466,10 @@ async function verify(apiKey: string): Promise<DemoState> {
     assert(getResult.isError !== true, 'Remote MCP get failed.');
     const fetched = asRecord(parseMcpJson(getResult));
     assert(fetched.content === state.initialContent, 'Remote MCP get returned unexpected content.');
-    assert(fetched.actorId === state.actorId, 'Memory provenance actor does not match the seeding actor.');
+    assert(
+      fetched.actorId === state.actorId,
+      'Memory provenance actor does not match the seeding actor.',
+    );
     assert(
       asRecord(fetched.metadata).marker === state.marker,
       'Memory provenance metadata omitted the demo marker.',
@@ -645,8 +656,7 @@ async function verify(apiKey: string): Promise<DemoState> {
     ...state,
     phase: 'VERIFIED',
     harvestRunId: String(run.id ?? ''),
-    sourceArtifactId:
-      typeof run.sourceArtifactId === 'string' ? run.sourceArtifactId : undefined,
+    sourceArtifactId: typeof run.sourceArtifactId === 'string' ? run.sourceArtifactId : undefined,
     candidateIds: candidates.map((candidate) => String(candidate.id ?? '')).filter(Boolean),
     verification: {
       listCount,
@@ -800,7 +810,8 @@ async function cleanup(apiKey: string): Promise<DemoState> {
       requestId: state.requestIds.deletion,
     });
   } catch (error) {
-    if (!(error instanceof DemoHttpError) || ![404, 409].includes(error.details.status)) throw error;
+    if (!(error instanceof DemoHttpError) || ![404, 409].includes(error.details.status))
+      throw error;
   }
 
   const activeAfterDelete = memoryIds(
