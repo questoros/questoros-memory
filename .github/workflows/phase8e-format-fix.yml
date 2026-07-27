@@ -6,7 +6,6 @@ on:
       - feat/phase-8-remote-mcp-demo
     paths:
       - 'README.md'
-      - '.env.example'
       - 'docs/architecture.md'
       - 'docs/cost-and-cleanup.md'
       - 'docs/development.md'
@@ -39,12 +38,10 @@ jobs:
           version: 11.16.0
           run_install: false
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @questoros-memory/database prisma:generate
       - name: Format Phase 8E files
         run: |
           pnpm exec prettier --write \
             README.md \
-            .env.example \
             docs/architecture.md \
             docs/cost-and-cleanup.md \
             docs/development.md \
@@ -56,8 +53,6 @@ jobs:
             docs/video-script.md \
             services/mcp-server/package.json \
             services/mcp-server/scripts/phase8-judge-fixture.ts
-          pnpm exec eslint services/mcp-server/scripts/phase8-judge-fixture.ts --fix
-          pnpm exec prettier --write services/mcp-server/scripts/phase8-judge-fixture.ts
       - name: Commit exact formatter output
         shell: bash
         run: |
@@ -69,7 +64,6 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add \
             README.md \
-            .env.example \
             docs/architecture.md \
             docs/cost-and-cleanup.md \
             docs/development.md \
