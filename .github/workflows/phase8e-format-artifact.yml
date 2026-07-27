@@ -1,0 +1,41 @@
+name: Phase 8E format artifact
+
+on:
+  push:
+    branches:
+      - feat/phase-8-remote-mcp-demo
+    paths:
+      - 'README.md'
+      - 'docs/final-submission-review.md'
+      - 'docs/private-judge-testing-template.md'
+      - '.github/workflows/phase8e-format-artifact.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  format-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/phase-8-remote-mcp-demo
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.16.0
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - name: Format Phase 8E files
+        run: |
+          pnpm exec prettier --write README.md docs/final-submission-review.md docs/private-judge-testing-template.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase8e-formatted
+          path: |
+            README.md
+            docs/final-submission-review.md
+            docs/private-judge-testing-template.md
+          retention-days: 1
