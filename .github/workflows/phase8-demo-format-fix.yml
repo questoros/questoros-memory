@@ -33,7 +33,7 @@ jobs:
             services/mcp-server/scripts/phase8-demo.ts \
             services/mcp-server/package.json \
             docs/phase-8-remote-mcp-demo.md
-      - name: Commit exact formatter output
+      - name: Publish exact formatter commit
         shell: bash
         run: |
           if git diff --quiet; then
@@ -44,4 +44,4 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add services/mcp-server/scripts/phase8-demo.ts services/mcp-server/package.json docs/phase-8-remote-mcp-demo.md
           git commit -m 'fix(phase8): format reproducible demo harness'
-          git push origin HEAD:feat/phase-8-remote-mcp-demo
+          git push --force origin HEAD:refs/heads/automation/phase8-demo-format
