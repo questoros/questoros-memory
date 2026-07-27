@@ -19,7 +19,10 @@
     "demo:phase8:setup": "tsx scripts/phase8-demo.ts setup",
     "demo:phase8:verify": "tsx scripts/phase8-demo.ts verify",
     "demo:phase8:cleanup": "tsx scripts/phase8-demo.ts cleanup",
-    "demo:phase8": "tsx scripts/phase8-demo.ts run"
+    "demo:phase8": "tsx scripts/phase8-demo.ts run",
+    "judge:phase8:provision": "tsx scripts/phase8-judge-fixture.ts provision",
+    "judge:phase8:verify": "tsx scripts/phase8-judge-fixture.ts verify",
+    "judge:phase8:cleanup": "tsx scripts/phase8-judge-fixture.ts cleanup"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
