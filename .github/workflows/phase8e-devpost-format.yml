@@ -27,7 +27,8 @@ jobs:
           version: 11.16.0
           run_install: false
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec prettier --write docs/devpost-submission.md
+      - name: Format the Devpost source document
+        run: pnpm exec prettier --write docs/devpost-submission.md
       - name: Commit exact formatter output
         shell: bash
         run: |
