@@ -161,14 +161,14 @@ The Phase 8D live run proved:
 
 Expected safe failures include:
 
-| Condition | Expected result |
-| --- | --- |
-| Missing bearer key | `AUTH_REQUIRED` |
-| Invalid, revoked, or expired key | sanitized authentication error |
-| Another project requested | `SCOPE_DENIED` |
-| Write tool requested | tool unavailable or protocol error |
-| Browser origin not allowlisted | `MCP_ORIGIN_DENIED` |
-| Invalid input | `VALIDATION_ERROR` |
+| Condition                        | Expected result                    |
+| -------------------------------- | ---------------------------------- |
+| Missing bearer key               | `AUTH_REQUIRED`                    |
+| Invalid, revoked, or expired key | sanitized authentication error     |
+| Another project requested        | `SCOPE_DENIED`                     |
+| Write tool requested             | tool unavailable or protocol error |
+| Browser origin not allowlisted   | `MCP_ORIGIN_DENIED`                |
+| Invalid input                    | `VALIDATION_ERROR`                 |
 
 Errors must not reveal API keys, database URLs, AWS credentials, raw headers, stack traces, model output, or private chain-of-thought.
 
