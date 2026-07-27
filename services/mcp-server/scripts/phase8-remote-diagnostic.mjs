@@ -16,6 +16,7 @@ const AWS_REGION = process.env.AWS_REGION?.trim() || 'ap-southeast-1';
 const LOG_GROUP = '/questoros-memory/staging/api';
 const FUNCTION_NAME = 'questoros-memory-staging-api';
 const REPORT_NAME = 'phase8-remote-mcp-diagnostic.txt';
+const DEPLOYED_BASELINE_HEAD = '476cce0c0d2850ea91e92a4300bd0e49d11f8dac';
 
 if (process.env[REQUIRED_GATE] !== 'true') {
   console.error(
@@ -73,6 +74,44 @@ function parseSmokeJson(output) {
   return null;
 }
 
+function parseJson(output) {
+  try {
+    return JSON.parse(output);
+  } catch {
+    return null;
+  }
+}
+
+function inferRuntimeState({ branchHead, functionConfiguration, logsText }) {
+  const findings = [];
+  const configuration = parseJson(functionConfiguration.stdout);
+  const branchAhead = branchHead && branchHead !== DEPLOYED_BASELINE_HEAD;
+  const fastifyMcpLogs = logsText.includes('"url":"/mcp"') && logsText.includes('"reqId":"req-');
+  const honoSyntheticSocketCrash = logsText.includes('socket.destroySoon is not a function');
+
+  if (branchAhead && fastifyMcpLogs) {
+    findings.push(
+      'The live Lambda is still routing /mcp through the old Fastify injection path even though the branch contains the direct Web Standards adapter.',
+    );
+  }
+  if (honoSyntheticSocketCrash) {
+    findings.push(
+      'The old Node/Hono transport cleanup crashed on a synthetic socket: socket.destroySoon is not a function.',
+    );
+  }
+  if (configuration?.LastModified) {
+    findings.push(`Lambda LastModified: ${configuration.LastModified}`);
+  }
+  if (configuration?.CodeSha256) {
+    findings.push(`Lambda CodeSha256: ${configuration.CodeSha256}`);
+  }
+  if (findings.length === 0) {
+    findings.push('No known stale-runtime signature was detected automatically.');
+  }
+
+  return findings;
+}
+
 const smokeEnvironment = {
   ...process.env,
   RUN_PHASE8_REMOTE_MCP_SMOKE: 'true',
@@ -117,16 +156,26 @@ const recentLogs = run('aws', [
   'json',
 ]);
 
+const branchHead = sanitize(run('git', ['rev-parse', 'HEAD']).stdout.trim());
+const runtimeFindings = inferRuntimeState({
+  branchHead,
+  functionConfiguration,
+  logsText: `${recentLogs.stdout}\n${recentLogs.stderr}`,
+});
+
 const reportSections = [
   '# QuestorOS Memory Phase 8 Remote MCP Diagnostic',
   '',
   `Generated: ${new Date().toISOString()}`,
-  `Branch head: ${sanitize(run('git', ['rev-parse', 'HEAD']).stdout.trim())}`,
+  `Branch head: ${branchHead}`,
   `Endpoint: ${sanitize(process.env.QUESTOROS_MEMORY_REMOTE_MCP_URL ?? 'not-set')}`,
   `AWS profile: ${AWS_PROFILE}`,
   `AWS region: ${AWS_REGION}`,
   `Smoke request ID: ${sanitize(requestId)}`,
   `Smoke exit status: ${smoke.status ?? 'null'}`,
+  '',
+  '## Automatic diagnosis',
+  ...runtimeFindings.map((finding) => `- ${sanitize(finding)}`),
   '',
   '## Smoke stdout',
   smoke.stdout || '(empty)',
@@ -178,6 +227,7 @@ process.stdout.write(
     reportPath,
     clipboardCopied,
     secretsRedacted: true,
+    runtimeFindings,
   })}\n`,
 );
 process.stdout.write(`Copyable diagnostic report: ${reportPath}\n`);
