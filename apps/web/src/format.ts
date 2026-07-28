@@ -19,7 +19,9 @@ export function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-export function memoryTitle(memory: Pick<MemoryRecord, 'memoryType' | 'metadata' | 'content'>): string {
+export function memoryTitle(
+  memory: Pick<MemoryRecord, 'memoryType' | 'metadata' | 'content'>,
+): string {
   const title = memory.metadata.title;
   if (typeof title === 'string' && title.trim()) return title.trim();
   const firstLine = memory.content.split(/\r?\n/)[0]?.trim();
@@ -60,9 +62,7 @@ export function formatDate(value: unknown, includeTime = false): string {
 
 export function formatPercent(value: unknown): string {
   const number = Number(value);
-  return Number.isFinite(number)
-    ? `${Math.round(Math.max(0, Math.min(1, number)) * 100)}%`
-    : '—';
+  return Number.isFinite(number) ? `${Math.round(Math.max(0, Math.min(1, number)) * 100)}%` : '—';
 }
 
 function safeExternalUrl(value: unknown): string | null {

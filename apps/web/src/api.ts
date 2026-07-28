@@ -52,7 +52,9 @@ export class MemoryApiClient {
 
   async listMemories(query = ''): Promise<{ items: MemoryRecord[]; nextCursor: string | null }> {
     const suffix = query ? `?${query}` : '';
-    return this.request<{ items: MemoryRecord[]; nextCursor: string | null }>(`/v1/memories${suffix}`);
+    return this.request<{ items: MemoryRecord[]; nextCursor: string | null }>(
+      `/v1/memories${suffix}`,
+    );
   }
 
   async searchMemories(body: Record<string, unknown>): Promise<SearchResult[]> {
@@ -99,10 +101,7 @@ export class MemoryApiClient {
     return [];
   }
 
-  async approveCandidate(
-    candidateId: string,
-    body: Record<string, unknown>,
-  ): Promise<unknown> {
+  async approveCandidate(candidateId: string, body: Record<string, unknown>): Promise<unknown> {
     return this.request(`/v1/candidates/${encodeURIComponent(candidateId)}/approve`, {
       method: 'POST',
       body: JSON.stringify(body),
@@ -147,7 +146,8 @@ export class MemoryApiClient {
 
       if (!response.ok) {
         const errorBody = isRecord(payload) ? (payload as ApiErrorBody) : undefined;
-        const message = errorBody?.error?.message ?? `Request failed with status ${response.status}.`;
+        const message =
+          errorBody?.error?.message ?? `Request failed with status ${response.status}.`;
         const code = errorBody?.error?.code ?? 'REQUEST_FAILED';
         const requestId =
           errorBody?.error?.requestId ?? response.headers.get('x-request-id') ?? undefined;

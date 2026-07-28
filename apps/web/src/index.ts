@@ -91,7 +91,8 @@ const state: AppState = {
 };
 
 let client: MemoryApiClient | null = null;
-const statusRoute = window.location.pathname.replace(/\/+$/, '') === '/status' || window.location.hash === '#status';
+const statusRoute =
+  window.location.pathname.replace(/\/+$/, '') === '/status' || window.location.hash === '#status';
 
 function hasPermission(permission: string): boolean {
   const permissions = state.identity?.permissions ?? [];
@@ -118,7 +119,11 @@ function scopePayload(): Record<string, unknown> {
 function scopeQuery(): string {
   const scope = state.identity?.credentialScope;
   if (!scope) return '';
-  const params = new URLSearchParams({ scopeType: scope.scopeType, status: 'ACTIVE', limit: '100' });
+  const params = new URLSearchParams({
+    scopeType: scope.scopeType,
+    status: 'ACTIVE',
+    limit: '100',
+  });
   if (scope.workspaceId) params.set('workspaceId', scope.workspaceId);
   if (scope.projectId) params.set('projectId', scope.projectId);
   return params.toString();
@@ -178,7 +183,10 @@ async function loadWorkspace(): Promise<void> {
       state.candidates = await client.listCandidates();
     } catch (error) {
       state.candidates = [];
-      setNotice('info', `Knowledge loaded. Review queue could not be loaded: ${describeError(error)}`);
+      setNotice(
+        'info',
+        `Knowledge loaded. Review queue could not be loaded: ${describeError(error)}`,
+      );
     }
   } else {
     state.candidates = [];
@@ -231,7 +239,9 @@ function sourceLinksMarkup(links: SourceLink[]): string {
   if (links.length === 0) return '';
   return `<div class="source-links">${links
     .map(
-      (link) => `<a class="source-link" href="${escapeAttribute(link.url)}" target="_blank" rel="noopener noreferrer">
+      (
+        link,
+      ) => `<a class="source-link" href="${escapeAttribute(link.url)}" target="_blank" rel="noopener noreferrer">
         <span>${link.kind === 'folder' ? '▱' : link.kind === 'meeting' ? '◉' : link.kind === 'message' ? '✉' : '↗'}</span>
         ${escapeHtml(link.label)}
       </a>`,
@@ -295,7 +305,9 @@ function renderSidebar(): string {
     <nav class="sidebar-nav" aria-label="MemoryOS">
       ${items
         .map(
-          (item) => `<button type="button" class="nav-item ${state.view === item.view ? 'active' : ''}" data-view="${item.view}">
+          (
+            item,
+          ) => `<button type="button" class="nav-item ${state.view === item.view ? 'active' : ''}" data-view="${item.view}">
             <span class="nav-icon">${item.icon}</span><span>${item.label}</span>
             ${item.view === 'review' && openCandidates().length > 0 ? `<em>${openCandidates().length}</em>` : ''}
           </button>`,
@@ -341,7 +353,9 @@ function renderMetric(label: string, value: string, description: string, tone: s
 }
 
 function openCandidates(): MemoryCandidate[] {
-  return state.candidates.filter((candidate) => !['APPROVED', 'REJECTED'].includes(candidate.status));
+  return state.candidates.filter(
+    (candidate) => !['APPROVED', 'REJECTED'].includes(candidate.status),
+  );
 }
 
 function renderOverview(): string {
@@ -357,7 +371,8 @@ function renderOverview(): string {
     .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
     .slice(0, 5);
   const typeCounts = new Map<string, number>();
-  for (const memory of active) typeCounts.set(memory.memoryType, (typeCounts.get(memory.memoryType) ?? 0) + 1);
+  for (const memory of active)
+    typeCounts.set(memory.memoryType, (typeCounts.get(memory.memoryType) ?? 0) + 1);
   const topTypes = [...typeCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   return `<section class="page-content overview-page">
@@ -436,9 +451,15 @@ function renderAsk(): string {
 }
 
 function renderSearchResults(): string {
-  if (!state.lastQuestion) return `<div class="ask-empty"><div class="ask-orb">M</div><p>MemoryOS will return the strongest matching intelligence with its confidence, reasoning, and evidence.</p></div>`;
-  if (state.searchResults.length === 0 && !state.loading) return emptyState('No matching intelligence found', 'Try a broader question or review the Knowledge library.');
-  if (state.searchResults.length === 0) return '<div class="loading-panel"><span class="spinner"></span> Searching organizational intelligence…</div>';
+  if (!state.lastQuestion)
+    return `<div class="ask-empty"><div class="ask-orb">M</div><p>MemoryOS will return the strongest matching intelligence with its confidence, reasoning, and evidence.</p></div>`;
+  if (state.searchResults.length === 0 && !state.loading)
+    return emptyState(
+      'No matching intelligence found',
+      'Try a broader question or review the Knowledge library.',
+    );
+  if (state.searchResults.length === 0)
+    return '<div class="loading-panel"><span class="spinner"></span> Searching organizational intelligence…</div>';
 
   const strongest = state.searchResults.slice(0, 3);
   return `<div class="results-section">
@@ -487,7 +508,9 @@ function filteredMemories(): MemoryRecord[] {
         .toLowerCase()
         .includes(query);
     })
-    .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+    .sort(
+      (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+    );
 }
 
 function renderKnowledge(): string {
@@ -590,9 +613,11 @@ function emptyState(title: string, description: string): string {
 }
 
 function selectedMemory(): MemoryRecord | null {
-  return state.memories.find((memory) => memory.id === state.selectedMemoryId) ??
+  return (
+    state.memories.find((memory) => memory.id === state.selectedMemoryId) ??
     state.searchResults.find((result) => result.memory.id === state.selectedMemoryId)?.memory ??
-    null;
+    null
+  );
 }
 
 function renderModal(): string {
@@ -684,7 +709,14 @@ function serviceStateTone(value: PublicHealth['api']): string {
 
 function renderStatusPage(): string {
   const health = state.publicHealth;
-  const overall = health.api === 'operational' && health.readiness === 'operational' ? 'operational' : health.api === 'checking' || health.readiness === 'checking' ? 'checking' : health.api === 'not-configured' ? 'not-configured' : 'degraded';
+  const overall =
+    health.api === 'operational' && health.readiness === 'operational'
+      ? 'operational'
+      : health.api === 'checking' || health.readiness === 'checking'
+        ? 'checking'
+        : health.api === 'not-configured'
+          ? 'not-configured'
+          : 'degraded';
   return `<main class="status-page">
     <header class="status-header"><div class="brand-lockup"><div class="brand-mark">M</div><div><strong>MemoryOS</strong><span>Service status</span></div></div><a class="button button-secondary" href="/">Open MemoryOS</a></header>
     <section class="status-container">
@@ -708,7 +740,12 @@ function statusComponent(name: string, status: PublicHealth['api'], description:
 }
 
 async function refreshPublicStatus(): Promise<void> {
-  state.publicHealth = { portal: 'operational', api: 'checking', readiness: 'checking', checkedAt: null };
+  state.publicHealth = {
+    portal: 'operational',
+    api: 'checking',
+    readiness: 'checking',
+    checkedAt: null,
+  };
   render();
   if (!configuredEndpoint) {
     state.publicHealth = {
@@ -716,7 +753,8 @@ async function refreshPublicStatus(): Promise<void> {
       api: 'not-configured',
       readiness: 'not-configured',
       checkedAt: new Date().toISOString(),
-      message: 'Set MEMORYOS_PUBLIC_API_BASE_URL during portal deployment to enable live public health checks.',
+      message:
+        'Set MEMORYOS_PUBLIC_API_BASE_URL during portal deployment to enable live public health checks.',
     };
     render();
     return;
@@ -749,7 +787,11 @@ async function refreshPublicStatus(): Promise<void> {
 }
 
 function render(): void {
-  root.innerHTML = statusRoute ? renderStatusPage() : state.connected ? renderShell() : renderConnect();
+  root.innerHTML = statusRoute
+    ? renderStatusPage()
+    : state.connected
+      ? renderShell()
+      : renderConnect();
   bindEvents();
 }
 
@@ -779,7 +821,9 @@ function bindEvents(): void {
   });
 
   document.querySelector<HTMLElement>('[data-signout]')?.addEventListener('click', signOut);
-  document.querySelectorAll<HTMLElement>('[data-refresh]').forEach((element) => element.addEventListener('click', () => void refreshWorkspace()));
+  document
+    .querySelectorAll<HTMLElement>('[data-refresh]')
+    .forEach((element) => element.addEventListener('click', () => void refreshWorkspace()));
 
   document.querySelector<HTMLFormElement>('#ask-form')?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -790,13 +834,15 @@ function bindEvents(): void {
     element.addEventListener('click', () => void askMemory(element.dataset.question ?? ''));
   });
 
-  document.querySelector<HTMLFormElement>('#knowledge-filter-form')?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    state.knowledgeQuery = String(form.get('query') ?? '');
-    state.knowledgeType = String(form.get('type') ?? 'ALL');
-    render();
-  });
+  document
+    .querySelector<HTMLFormElement>('#knowledge-filter-form')
+    ?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      state.knowledgeQuery = String(form.get('query') ?? '');
+      state.knowledgeType = String(form.get('type') ?? 'ALL');
+      render();
+    });
 
   document.querySelectorAll<HTMLElement>('[data-memory-id]').forEach((element) => {
     element.addEventListener('click', () => {
@@ -811,12 +857,18 @@ function bindEvents(): void {
     state.showCreate = true;
     render();
   });
-  document.querySelectorAll<HTMLElement>('[data-close-modal]').forEach((element) => element.addEventListener('click', closeModal));
-  document.querySelector<HTMLElement>('[data-modal-backdrop]')?.addEventListener('click', (event) => {
-    if (event.target === event.currentTarget) closeModal();
-  });
+  document
+    .querySelectorAll<HTMLElement>('[data-close-modal]')
+    .forEach((element) => element.addEventListener('click', closeModal));
+  document
+    .querySelector<HTMLElement>('[data-modal-backdrop]')
+    ?.addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeModal();
+    });
 
-  document.querySelector<HTMLElement>('[data-load-revisions]')?.addEventListener('click', () => void loadRevisions());
+  document
+    .querySelector<HTMLElement>('[data-load-revisions]')
+    ?.addEventListener('click', () => void loadRevisions());
   document.querySelector<HTMLElement>('[data-correct-memory]')?.addEventListener('click', () => {
     state.correctionMode = true;
     render();
@@ -825,26 +877,40 @@ function bindEvents(): void {
     state.correctionMode = false;
     render();
   });
-  document.querySelector<HTMLFormElement>('#correction-form')?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    void submitCorrection(new FormData(event.currentTarget));
-  });
-  document.querySelector<HTMLFormElement>('#create-memory-form')?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    void submitCreateMemory(new FormData(event.currentTarget));
-  });
+  document
+    .querySelector<HTMLFormElement>('#correction-form')
+    ?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void submitCorrection(new FormData(event.currentTarget));
+    });
+  document
+    .querySelector<HTMLFormElement>('#create-memory-form')
+    ?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void submitCreateMemory(new FormData(event.currentTarget));
+    });
 
-  document.querySelector<HTMLSelectElement>('#review-filter')?.addEventListener('change', (event) => {
-    state.reviewFilter = event.currentTarget.value;
-    render();
-  });
+  document
+    .querySelector<HTMLSelectElement>('#review-filter')
+    ?.addEventListener('change', (event) => {
+      state.reviewFilter = event.currentTarget.value;
+      render();
+    });
   document.querySelectorAll<HTMLElement>('[data-approve-candidate]').forEach((element) => {
-    element.addEventListener('click', () => void approveCandidate(element.dataset.approveCandidate ?? ''));
+    element.addEventListener(
+      'click',
+      () => void approveCandidate(element.dataset.approveCandidate ?? ''),
+    );
   });
   document.querySelectorAll<HTMLElement>('[data-reject-candidate]').forEach((element) => {
-    element.addEventListener('click', () => void rejectCandidate(element.dataset.rejectCandidate ?? ''));
+    element.addEventListener(
+      'click',
+      () => void rejectCandidate(element.dataset.rejectCandidate ?? ''),
+    );
   });
-  document.querySelector<HTMLElement>('[data-status-refresh]')?.addEventListener('click', () => void refreshPublicStatus());
+  document
+    .querySelector<HTMLElement>('[data-status-refresh]')
+    ?.addEventListener('click', () => void refreshPublicStatus());
 }
 
 function closeModal(): void {
@@ -863,7 +929,11 @@ async function askMemory(question: string): Promise<void> {
   clearNotice();
   render();
   try {
-    state.searchResults = await client.searchMemories({ ...scopePayload(), queryText: state.lastQuestion, limit: 12 });
+    state.searchResults = await client.searchMemories({
+      ...scopePayload(),
+      queryText: state.lastQuestion,
+      limit: 12,
+    });
   } catch (error) {
     setNotice('error', describeError(error));
   } finally {
@@ -938,13 +1008,19 @@ async function approveCandidate(candidateId: string): Promise<void> {
   if (!client || !candidateId) return;
   const candidate = state.candidates.find((item) => item.id === candidateId);
   if (!candidate) return;
-  const reason = window.prompt('Record the reason for approval:', 'Reviewed and approved for organizational use.');
+  const reason = window.prompt(
+    'Record the reason for approval:',
+    'Reviewed and approved for organizational use.',
+  );
   if (reason === null || !reason.trim()) return;
   const body: Record<string, unknown> = { reason: reason.trim() };
   if (['DUPLICATE', 'NEAR_DUPLICATE'].includes(candidate.status)) {
     const mergeTarget = candidate.relatedMemoryIds?.[0];
     if (!mergeTarget) {
-      setNotice('error', 'This duplicate requires an explicit related memory before it can be merged.');
+      setNotice(
+        'error',
+        'This duplicate requires an explicit related memory before it can be merged.',
+      );
       render();
       return;
     }

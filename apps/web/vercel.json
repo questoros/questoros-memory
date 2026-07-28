@@ -6,7 +6,10 @@
   "cleanUrls": true,
   "rewrites": [
     { "source": "/status", "destination": "/index.html" },
-    { "source": "/((?!index\\.js|index\\.js\\.map|styles\\.css|config\\.js|favicon\\.svg).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!index\\.js|index\\.js\\.map|styles\\.css|config\\.js|favicon\\.svg).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {

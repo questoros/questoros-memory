@@ -1,6 +1,7 @@
 export type PortalView = 'overview' | 'ask' | 'knowledge' | 'review';
 
-export type ServiceState = 'checking' | 'operational' | 'degraded' | 'unavailable' | 'not-configured';
+export type ServiceState =
+  'checking' | 'operational' | 'degraded' | 'unavailable' | 'not-configured';
 
 export interface RuntimeConfig {
   apiBaseUrl?: string;
