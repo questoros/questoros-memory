@@ -1,0 +1,128 @@
+/// A human identity that belongs only to standalone MemoryOS.
+/// It is deliberately separate from QuestorOS application identities.
+model PortalIdentity {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email              String    @unique(map: "portal_identities_email_unique") @db.String
+  displayName        String?   @map("display_name") @db.String
+  passwordHash       String    @map("password_hash") @db.String
+  status             String    @default("ACTIVE") @db.String
+  emailVerifiedAt    DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  failedLoginCount   Int       @default(0) @map("failed_login_count") @db.Int4
+  lockedUntil        DateTime? @map("locked_until") @db.Timestamptz(6)
+  passwordChangedAt  DateTime  @default(now()) @map("password_changed_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  lastLoginAt        DateTime? @map("last_login_at") @db.Timestamptz(6)
+
+  @@index([status, updatedAt], map: "portal_identities_status_updated_idx")
+  @@map("portal_identities")
+}
+
+/// Organization/workspace membership for one standalone MemoryOS identity.
+model PortalMembership {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identityId  String    @map("identity_id") @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  actorId     String    @map("actor_id") @db.Uuid
+  role        String    @default("READER") @db.String
+  status      String    @default("ACTIVE") @db.String
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  disabledAt  DateTime? @map("disabled_at") @db.Timestamptz(6)
+
+  @@unique([identityId, tenantId, workspaceId], map: "portal_memberships_identity_scope_unique")
+  @@index([tenantId, workspaceId, status], map: "portal_memberships_scope_status_idx")
+  @@index([identityId, status], map: "portal_memberships_identity_status_idx")
+  @@map("portal_memberships")
+}
+
+/// Revocable browser session. The raw session token is never stored.
+model PortalSession {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identityId       String    @map("identity_id") @db.Uuid
+  membershipId     String    @map("membership_id") @db.Uuid
+  apiKeyId         String    @map("api_key_id") @db.Uuid
+  tokenHash        String    @unique(map: "portal_sessions_token_hash_unique") @map("token_hash") @db.String
+  csrfHash         String    @map("csrf_hash") @db.String
+  userAgentHash    String?   @map("user_agent_hash") @db.String
+  ipAddressHash    String?   @map("ip_address_hash") @db.String
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
+  lastSeenAt       DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revocationReason String?   @map("revocation_reason") @db.String
+
+  @@index([identityId, revokedAt, expiresAt], map: "portal_sessions_identity_active_idx")
+  @@index([membershipId, revokedAt, expiresAt], map: "portal_sessions_membership_active_idx")
+  @@map("portal_sessions")
+}
+
+/// Invitation into a specific MemoryOS organization and workspace.
+model PortalInvitation {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String    @map("tenant_id") @db.Uuid
+  workspaceId         String    @map("workspace_id") @db.Uuid
+  invitedByIdentityId String    @map("invited_by_identity_id") @db.Uuid
+  email               String    @db.String
+  role                String    @default("READER") @db.String
+  tokenHash           String    @unique(map: "portal_invitations_token_hash_unique") @map("token_hash") @db.String
+  status              String    @default("PENDING") @db.String
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz(6)
+  acceptedAt          DateTime? @map("accepted_at") @db.Timestamptz(6)
+  acceptedByIdentityId String?  @map("accepted_by_identity_id") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt           DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  @@index([tenantId, workspaceId, status, expiresAt], map: "portal_invitations_scope_status_idx")
+  @@index([email, status, expiresAt], map: "portal_invitations_email_status_idx")
+  @@map("portal_invitations")
+}
+
+/// One-time email verification or password recovery token.
+model PortalIdentityToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identityId String    @map("identity_id") @db.Uuid
+  tokenType  String    @map("token_type") @db.String
+  tokenHash  String    @unique(map: "portal_identity_tokens_token_hash_unique") @map("token_hash") @db.String
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+
+  @@index([identityId, tokenType, expiresAt], map: "portal_identity_tokens_identity_type_idx")
+  @@map("portal_identity_tokens")
+}
+
+/// Explicit, auditable, and revocable link to an identity in another product.
+model PortalIdentityLink {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identityId         String    @map("identity_id") @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  provider           String    @db.String
+  externalSubject    String    @map("external_subject") @db.String
+  linkedByIdentityId String    @map("linked_by_identity_id") @db.Uuid
+  status             String    @default("ACTIVE") @db.String
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt          DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  @@unique([provider, externalSubject, tenantId], map: "portal_identity_links_external_scope_unique")
+  @@index([identityId, tenantId, status], map: "portal_identity_links_identity_scope_idx")
+  @@map("portal_identity_links")
+}
+
+/// Security and access audit for standalone MemoryOS identity operations.
+model PortalAuthAuditEvent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identityId String?  @map("identity_id") @db.Uuid
+  tenantId   String?  @map("tenant_id") @db.Uuid
+  action     String   @db.String
+  outcome    String   @db.String
+  requestId  String?  @map("request_id") @db.String
+  metadata   Json     @default("{}") @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([identityId, createdAt], map: "portal_auth_audit_identity_created_idx")
+  @@index([tenantId, createdAt], map: "portal_auth_audit_tenant_created_idx")
+  @@index([action, createdAt], map: "portal_auth_audit_action_created_idx")
+  @@map("portal_auth_audit_events")
+}
