@@ -35,6 +35,24 @@ jobs:
       - name: Build packages
         run: pnpm exec turbo run build --filter=./packages/*
 
+      - name: Format product branch
+        if: github.head_ref == 'feat/memoryos-finished-product' || github.ref_name == 'feat/memoryos-finished-product'
+        run: pnpm exec prettier --write .
+
+      - name: Package formatter output
+        if: github.head_ref == 'feat/memoryos-finished-product' || github.ref_name == 'feat/memoryos-finished-product'
+        run: |
+          git diff --name-only --diff-filter=ACM -z | tar --null -T - -czf formatted-source.tgz
+
+      - name: Upload formatter output
+        if: github.head_ref == 'feat/memoryos-finished-product' || github.ref_name == 'feat/memoryos-finished-product'
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatted-source
+          path: formatted-source.tgz
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Format check
         run: pnpm format:check
 
