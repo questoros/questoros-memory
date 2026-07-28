@@ -1,13 +1,16 @@
 {
   "name": "@questoros-memory/web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Future demo UI and Memory Inspector for QuestorOS Memory",
+  "type": "module",
+  "description": "Standalone MemoryOS client portal for controlled company pilots",
   "scripts": {
-    "build": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
-    "lint": "echo \"lint not configured for this package yet\"",
-    "test": "echo \"tests not implemented for this package yet\""
+    "clean": "node -e \"import('node:fs').then(({ rmSync }) => rmSync('dist', { recursive: true, force: true }))\"",
+    "build": "pnpm clean && tsc --pretty false && node scripts/copy-static.mjs",
+    "dev": "pnpm build && node scripts/serve.mjs",
+    "typecheck": "tsc --noEmit --pretty false",
+    "lint": "tsc --noEmit --pretty false",
+    "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.8.0"
