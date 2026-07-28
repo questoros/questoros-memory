@@ -59,10 +59,25 @@ jobs:
             apps/web/src/index.ts \
             apps/web/src/types.ts \
             apps/web/vercel.json
+          : > formatter-push.log
           if ! git diff --cached --quiet; then
-            git commit -m "style(product): format MemoryOS client portal"
-            git push origin "HEAD:${GITHUB_HEAD_REF}"
+            git commit -m "style(product): format MemoryOS client portal" >> formatter-push.log 2>&1
+            set +e
+            git push origin "HEAD:${GITHUB_HEAD_REF}" >> formatter-push.log 2>&1
+            echo "push_exit=$?" >> formatter-push.log
+            set -e
+          else
+            echo "no_formatter_diff=true" >> formatter-push.log
           fi
+
+      - name: Upload formatter diagnostics
+        if: always() && github.head_ref == 'feat/memoryos-finished-product'
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatter-diagnostics
+          path: formatter-push.log
+          if-no-files-found: warn
+          retention-days: 1
 
       - name: Format check
         run: pnpm format:check
