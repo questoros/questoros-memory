@@ -7,9 +7,6 @@ on:
       - main
       - 'feat/**'
 
-permissions:
-  contents: write
-
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -17,8 +14,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -39,45 +34,6 @@ jobs:
 
       - name: Build packages
         run: pnpm exec turbo run build --filter=./packages/*
-
-      - name: Format product branch
-        if: github.head_ref == 'feat/memoryos-finished-product' || github.ref_name == 'feat/memoryos-finished-product'
-        run: pnpm exec prettier --write .
-
-      - name: Commit formatter output
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/memoryos-finished-product'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git restore .github/workflows/ci.yml
-          git add \
-            apps/web/public/index.html \
-            apps/web/public/styles.css \
-            apps/web/scripts/serve.mjs \
-            apps/web/src/api.ts \
-            apps/web/src/format.ts \
-            apps/web/src/index.ts \
-            apps/web/src/types.ts \
-            apps/web/vercel.json
-          : > formatter-push.log
-          if ! git diff --cached --quiet; then
-            git commit -m "style(product): format MemoryOS client portal" >> formatter-push.log 2>&1
-            set +e
-            git push origin "HEAD:${GITHUB_HEAD_REF}" >> formatter-push.log 2>&1
-            echo "push_exit=$?" >> formatter-push.log
-            set -e
-          else
-            echo "no_formatter_diff=true" >> formatter-push.log
-          fi
-
-      - name: Upload formatter diagnostics
-        if: always() && github.head_ref == 'feat/memoryos-finished-product'
-        uses: actions/upload-artifact@v4
-        with:
-          name: formatter-diagnostics
-          path: formatter-push.log
-          if-no-files-found: warn
-          retention-days: 1
 
       - name: Format check
         run: pnpm format:check
