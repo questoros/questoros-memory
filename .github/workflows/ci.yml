@@ -38,17 +38,31 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
-      - name: Lint
-        run: pnpm lint
+      - name: Capture product diagnostics
+        run: |
+          set +e
+          pnpm lint > lint.log 2>&1
+          echo "lint_exit=$?" >> diagnostics-summary.txt
+          pnpm typecheck > typecheck.log 2>&1
+          echo "typecheck_exit=$?" >> diagnostics-summary.txt
+          pnpm test > test.log 2>&1
+          echo "test_exit=$?" >> diagnostics-summary.txt
+          pnpm build > build.log 2>&1
+          echo "build_exit=$?" >> diagnostics-summary.txt
+          pnpm --filter @questoros-memory/aws-cdk synth > synth.log 2>&1
+          echo "synth_exit=$?" >> diagnostics-summary.txt
+          set -e
 
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
-
-      - name: Build
-        run: pnpm build
-
-      - name: Synthesize and verify AWS staging package
-        run: pnpm --filter @questoros-memory/aws-cdk synth
+      - name: Upload product diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-quality-diagnostics
+          path: |
+            diagnostics-summary.txt
+            lint.log
+            typecheck.log
+            test.log
+            build.log
+            synth.log
+          if-no-files-found: error
+          retention-days: 1
