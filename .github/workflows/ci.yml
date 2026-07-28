@@ -49,7 +49,16 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git restore .github/workflows/ci.yml
+          git add \
+            apps/web/public/index.html \
+            apps/web/public/styles.css \
+            apps/web/scripts/serve.mjs \
+            apps/web/src/api.ts \
+            apps/web/src/format.ts \
+            apps/web/src/index.ts \
+            apps/web/src/types.ts \
+            apps/web/vercel.json
           if ! git diff --cached --quiet; then
             git commit -m "style(product): format MemoryOS client portal"
             git push origin "HEAD:${GITHUB_HEAD_REF}"
