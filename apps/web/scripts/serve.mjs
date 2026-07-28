@@ -1,7 +1,8 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import process from 'node:process';
+import { URL, fileURLToPath } from 'node:url';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const outputDirectory = path.resolve(currentDirectory, '..', 'dist');
@@ -21,7 +22,9 @@ function safePath(requestPath) {
   const decoded = decodeURIComponent(pathname);
   const requested = decoded === '/' || decoded === '/status' ? '/index.html' : decoded;
   const candidate = path.resolve(outputDirectory, `.${requested}`);
-  return candidate.startsWith(outputDirectory) ? candidate : path.join(outputDirectory, 'index.html');
+  return candidate.startsWith(outputDirectory)
+    ? candidate
+    : path.join(outputDirectory, 'index.html');
 }
 
 const server = createServer(async (request, response) => {
@@ -36,7 +39,10 @@ const server = createServer(async (request, response) => {
     const body = await readFile(filePath);
     response.writeHead(200, {
       'content-type': contentTypes.get(path.extname(filePath)) ?? 'application/octet-stream',
-      'cache-control': filePath.endsWith('index.html') || filePath.endsWith('config.js') ? 'no-store' : 'public, max-age=3600',
+      'cache-control':
+        filePath.endsWith('index.html') || filePath.endsWith('config.js')
+          ? 'no-store'
+          : 'public, max-age=3600',
       'x-content-type-options': 'nosniff',
       'referrer-policy': 'strict-origin-when-cross-origin',
     });
