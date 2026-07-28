@@ -3,11 +3,14 @@ import type {
   MemoryCandidate,
   MemoryRecord,
   MemoryRevision,
+  PortalAuthSession,
+  PortalSignupResult,
   SearchResult,
   WhoAmI,
 } from './types.js';
 
 const REQUEST_TIMEOUT_MS = 20_000;
+const CSRF_STORAGE_KEY = 'memoryos.csrf';
 
 export class MemoryApiError extends Error {
   readonly status: number;
@@ -24,26 +27,74 @@ export class MemoryApiError extends Error {
 }
 
 export interface RequestOptions extends RequestInit {
-  authenticated?: boolean;
+  publicRoute?: boolean;
 }
 
 export class MemoryApiClient {
   readonly baseUrl: string;
-  readonly apiKey: string;
+  private csrfToken: string;
 
-  constructor(baseUrl: string, apiKey: string) {
+  constructor(baseUrl: string) {
     this.baseUrl = normalizeEndpoint(baseUrl);
-    this.apiKey = apiKey.trim();
+    this.csrfToken = window.sessionStorage.getItem(CSRF_STORAGE_KEY) ?? '';
+  }
+
+  setCsrfToken(value: string | undefined): void {
+    this.csrfToken = value?.trim() ?? '';
+    if (this.csrfToken) window.sessionStorage.setItem(CSRF_STORAGE_KEY, this.csrfToken);
+    else window.sessionStorage.removeItem(CSRF_STORAGE_KEY);
   }
 
   async health(): Promise<boolean> {
-    const result = await this.request<{ status?: string }>('/healthz', { authenticated: false });
+    const result = await this.request<{ status?: string }>('/healthz', { publicRoute: true });
     return result.status === 'ok';
   }
 
   async ready(): Promise<boolean> {
-    const result = await this.request<{ status?: string }>('/readyz', { authenticated: false });
+    const result = await this.request<{ status?: string }>('/readyz', { publicRoute: true });
     return result.status === 'ok';
+  }
+
+  async signup(body: {
+    email: string;
+    password: string;
+    displayName: string;
+    organizationName: string;
+  }): Promise<PortalSignupResult> {
+    return this.request<PortalSignupResult>('/v1/portal/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      publicRoute: true,
+    });
+  }
+
+  async verifyEmail(token: string): Promise<PortalAuthSession> {
+    const result = await this.request<PortalAuthSession>('/v1/portal/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+      publicRoute: true,
+    });
+    this.setCsrfToken(result.csrfToken);
+    return result;
+  }
+
+  async login(email: string, password: string): Promise<PortalAuthSession> {
+    const result = await this.request<PortalAuthSession>('/v1/portal/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+      publicRoute: true,
+    });
+    this.setCsrfToken(result.csrfToken);
+    return result;
+  }
+
+  async currentSession(): Promise<PortalAuthSession> {
+    return this.request<PortalAuthSession>('/v1/portal/auth/me');
+  }
+
+  async logout(): Promise<void> {
+    await this.request<{ ok: true }>('/v1/portal/auth/logout', { method: 'POST' });
+    this.setCsrfToken(undefined);
   }
 
   async whoami(): Promise<WhoAmI> {
@@ -122,19 +173,24 @@ export class MemoryApiClient {
     headers.set('accept', 'application/json');
     headers.set('x-request-id', createRequestId());
 
-    const authenticated = options.authenticated !== false;
-    if (authenticated) {
-      if (!this.apiKey) {
+    const method = (options.method ?? 'GET').toUpperCase();
+    if (!options.publicRoute && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      if (!this.csrfToken) {
         window.clearTimeout(timeout);
-        throw new MemoryApiError('An API key is required.', 401, 'AUTH_REQUIRED');
+        throw new MemoryApiError(
+          'The secure MemoryOS session needs to be refreshed.',
+          403,
+          'CSRF_REQUIRED',
+        );
       }
-      headers.set('authorization', `Bearer ${this.apiKey}`);
+      headers.set('x-memoryos-csrf', this.csrfToken);
     }
     if (options.body !== undefined) headers.set('content-type', 'application/json');
 
     try {
       const response = await fetch(`${this.baseUrl}${path}`, {
         ...options,
+        credentials: 'include',
         headers,
         redirect: 'error',
         signal: controller.signal,
@@ -161,7 +217,7 @@ export class MemoryApiClient {
         throw new MemoryApiError('The request timed out.', 408, 'REQUEST_TIMEOUT');
       }
       throw new MemoryApiError(
-        'MemoryOS could not reach the configured service. Check the endpoint and allowed portal origin.',
+        'MemoryOS could not reach its service. Check the standalone portal configuration and service status.',
         0,
         'NETWORK_ERROR',
       );
@@ -173,15 +229,15 @@ export class MemoryApiClient {
 
 export function normalizeEndpoint(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, '');
-  if (!trimmed) throw new MemoryApiError('The MemoryOS service endpoint is required.', 400);
+  if (!trimmed) throw new MemoryApiError('MemoryOS service is not configured.', 503);
   let parsed: URL;
   try {
     parsed = new URL(trimmed);
   } catch {
-    throw new MemoryApiError('Enter a valid MemoryOS service endpoint.', 400);
+    throw new MemoryApiError('MemoryOS service is not configured correctly.', 503);
   }
   if (!['https:', 'http:'].includes(parsed.protocol)) {
-    throw new MemoryApiError('The service endpoint must use HTTP or HTTPS.', 400);
+    throw new MemoryApiError('MemoryOS service is not configured correctly.', 503);
   }
   if (parsed.username || parsed.password) {
     throw new MemoryApiError('Credentials must not be embedded in the service URL.', 400);
