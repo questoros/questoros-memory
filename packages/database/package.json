@@ -10,16 +10,19 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
-    "prisma:format": "prisma format --schema prisma/schema.prisma",
-    "prisma:validate": "prisma validate --schema prisma/schema.prisma",
-    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:format": "prisma format --schema prisma",
+    "prisma:validate": "prisma validate --schema prisma",
+    "prisma:generate": "prisma generate --schema prisma",
     "db:bootstrap": "tsx scripts/bootstrap-database.ts",
-    "db:migrate": "prisma migrate deploy --schema prisma/schema.prisma",
+    "db:migrate": "prisma migrate deploy --schema prisma",
     "db:verify": "tsx scripts/verify-schema.ts",
     "db:drift": "node scripts/assert-prisma-drift.mjs",
     "db:verify-vector": "tsx scripts/verify-vector-contract.ts",
     "auth:bootstrap-local": "tsx scripts/bootstrap-local-auth.ts",
     "auth:upgrade-phase7": "tsx scripts/upgrade-phase7-key-permissions.ts"
+  },
+  "prisma": {
+    "schema": "prisma"
   },
   "dependencies": {
     "@prisma/client": "^6.7.0",

@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const schema = path.join(root, 'prisma', 'schema.prisma');
+const schema = path.join(root, 'prisma');
 
 if (!process.env.DATABASE_URL?.trim()) {
   console.error('DATABASE_URL is required for drift check.');
