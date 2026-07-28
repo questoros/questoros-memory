@@ -7,18 +7,13 @@ on:
       - main
       - 'feat/**'
 
-permissions:
-  contents: write
-
 jobs:
   quality:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout product branch
+      - name: Checkout
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -34,38 +29,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Apply product type fixes
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/memoryos-finished-product'
-        run: |
-          python - <<'PY'
-          from pathlib import Path
+      - name: Generate Prisma Client
+        run: pnpm --filter @questoros-memory/database prisma:generate
 
-          path = Path('apps/web/src/index.ts')
-          source = path.read_text()
-          source = source.replace(
-              "const root = document.querySelector<HTMLElement>('#app');\nif (!root) throw new Error('MemoryOS portal root was not found.');",
-              "const rootElement = document.querySelector<HTMLElement>('#app');\nif (!rootElement) throw new Error('MemoryOS portal root was not found.');\nconst root: HTMLElement = rootElement;",
-          )
-          source = source.replace(
-              'new FormData(event.currentTarget)',
-              'new FormData(event.currentTarget as HTMLFormElement)',
-          )
-          source = source.replace(
-              'event.currentTarget.value',
-              '(event.currentTarget as HTMLSelectElement).value',
-          )
-          path.write_text(source)
-          PY
-          pnpm exec prettier --write apps/web/src/index.ts
+      - name: Build packages
+        run: pnpm exec turbo run build --filter=./packages/*
 
-      - name: Commit product type fixes
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/memoryos-finished-product'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git restore .github/workflows/ci.yml
-          git add apps/web/src/index.ts
-          if ! git diff --cached --quiet; then
-            git commit -m "fix(product): satisfy strict browser type checks"
-            git push origin "HEAD:${GITHUB_HEAD_REF}"
-          fi
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Synthesize and verify AWS staging package
+        run: pnpm --filter @questoros-memory/aws-cdk synth
