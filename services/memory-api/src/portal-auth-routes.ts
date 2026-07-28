@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
   PORTAL_SESSION_COOKIE,
   PortalAuthError,
@@ -12,6 +12,8 @@ import {
   verifyStandaloneEmail,
 } from './portal-auth.js';
 import { sendPortalEmail } from './portal-email.js';
+
+const PORTAL_CSRF_COOKIE = 'memoryos_csrf';
 
 function requestContext(request: FastifyRequest) {
   const forwarded = request.headers['x-forwarded-for'];
@@ -36,6 +38,39 @@ function authErrorBody(error: PortalAuthError, requestId: string) {
 
 function sessionToken(request: FastifyRequest): string | undefined {
   return readCookie(request.headers.cookie, PORTAL_SESSION_COOKIE);
+}
+
+function csrfCookie(token: string, expiresAt: Date): string {
+  return [
+    `${PORTAL_CSRF_COOKIE}=${encodeURIComponent(token)}`,
+    'Path=/',
+    'Secure',
+    'SameSite=Lax',
+    `Expires=${expiresAt.toUTCString()}`,
+  ].join('; ');
+}
+
+function clearCsrfCookie(): string {
+  return [
+    `${PORTAL_CSRF_COOKIE}=`,
+    'Path=/',
+    'Secure',
+    'SameSite=Lax',
+    'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+    'Max-Age=0',
+  ].join('; ');
+}
+
+function setSessionCookies(
+  reply: FastifyReply,
+  sessionTokenValue: string,
+  csrfToken: string,
+  expiresAt: Date,
+): void {
+  reply.raw.setHeader('Set-Cookie', [
+    serializePortalSessionCookie(sessionTokenValue, expiresAt),
+    csrfCookie(csrfToken, expiresAt),
+  ]);
 }
 
 export function registerPortalAuthRoutes(app: FastifyInstance): void {
@@ -72,7 +107,7 @@ export function registerPortalAuthRoutes(app: FastifyInstance): void {
     const requestId = request.id as string;
     try {
       const session = await verifyStandaloneEmail(request.body, requestContext(request));
-      reply.header('set-cookie', serializePortalSessionCookie(session.sessionToken, session.expiresAt));
+      setSessionCookies(reply, session.sessionToken, session.csrfToken, session.expiresAt);
       return reply.status(200).send({
         ok: true,
         csrfToken: session.csrfToken,
@@ -92,7 +127,7 @@ export function registerPortalAuthRoutes(app: FastifyInstance): void {
     const requestId = request.id as string;
     try {
       const session = await loginStandaloneMemoryOS(request.body, requestContext(request));
-      reply.header('set-cookie', serializePortalSessionCookie(session.sessionToken, session.expiresAt));
+      setSessionCookies(reply, session.sessionToken, session.csrfToken, session.expiresAt);
       return reply.status(200).send({
         ok: true,
         csrfToken: session.csrfToken,
@@ -135,7 +170,7 @@ export function registerPortalAuthRoutes(app: FastifyInstance): void {
     try {
       const token = sessionToken(request);
       if (token) await logoutStandaloneMemoryOS(token, requestId);
-      reply.header('set-cookie', clearPortalSessionCookie());
+      reply.raw.setHeader('Set-Cookie', [clearPortalSessionCookie(), clearCsrfCookie()]);
       return reply.status(200).send({ ok: true });
     } catch (error) {
       if (error instanceof PortalAuthError) {
