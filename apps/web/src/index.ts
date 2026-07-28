@@ -54,8 +54,9 @@ interface AppState {
   publicHealth: PublicHealth;
 }
 
-const root = document.querySelector<HTMLElement>('#app');
-if (!root) throw new Error('MemoryOS portal root was not found.');
+const rootElement = document.querySelector<HTMLElement>('#app');
+if (!rootElement) throw new Error('MemoryOS portal root was not found.');
+const root: HTMLElement = rootElement;
 
 const runtimeConfig = window.__MEMORYOS_CONFIG__ ?? {};
 const configuredEndpoint = runtimeConfig.apiBaseUrl?.trim() ?? '';
@@ -816,7 +817,7 @@ function bindEvents(): void {
 
   document.querySelector<HTMLFormElement>('#connect-form')?.addEventListener('submit', (event) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(event.currentTarget as HTMLFormElement);
     void connect(String(form.get('endpoint') ?? ''), String(form.get('apiKey') ?? ''));
   });
 
@@ -827,7 +828,7 @@ function bindEvents(): void {
 
   document.querySelector<HTMLFormElement>('#ask-form')?.addEventListener('submit', (event) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(event.currentTarget as HTMLFormElement);
     void askMemory(String(form.get('query') ?? ''));
   });
   document.querySelectorAll<HTMLElement>('[data-question]').forEach((element) => {
@@ -838,7 +839,7 @@ function bindEvents(): void {
     .querySelector<HTMLFormElement>('#knowledge-filter-form')
     ?.addEventListener('submit', (event) => {
       event.preventDefault();
-      const form = new FormData(event.currentTarget);
+      const form = new FormData(event.currentTarget as HTMLFormElement);
       state.knowledgeQuery = String(form.get('query') ?? '');
       state.knowledgeType = String(form.get('type') ?? 'ALL');
       render();
@@ -881,19 +882,19 @@ function bindEvents(): void {
     .querySelector<HTMLFormElement>('#correction-form')
     ?.addEventListener('submit', (event) => {
       event.preventDefault();
-      void submitCorrection(new FormData(event.currentTarget));
+      void submitCorrection(new FormData(event.currentTarget as HTMLFormElement));
     });
   document
     .querySelector<HTMLFormElement>('#create-memory-form')
     ?.addEventListener('submit', (event) => {
       event.preventDefault();
-      void submitCreateMemory(new FormData(event.currentTarget));
+      void submitCreateMemory(new FormData(event.currentTarget as HTMLFormElement));
     });
 
   document
     .querySelector<HTMLSelectElement>('#review-filter')
     ?.addEventListener('change', (event) => {
-      state.reviewFilter = event.currentTarget.value;
+      state.reviewFilter = (event.currentTarget as HTMLSelectElement).value;
       render();
     });
   document.querySelectorAll<HTMLElement>('[data-approve-candidate]').forEach((element) => {
