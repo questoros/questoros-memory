@@ -1,12 +1,46 @@
-export type PortalView = 'overview' | 'ask' | 'knowledge' | 'review';
+export type PortalView = 'home' | 'ask' | 'knowledge' | 'projects' | 'attention';
 
 export type ServiceState =
-  'checking' | 'operational' | 'degraded' | 'unavailable' | 'not-configured';
+  | 'checking'
+  | 'operational'
+  | 'degraded'
+  | 'unavailable'
+  | 'not-configured';
 
 export interface RuntimeConfig {
   apiBaseUrl?: string;
   productName?: string;
   statusPageTitle?: string;
+}
+
+export interface PortalIdentity {
+  id: string;
+  email: string;
+  displayName: string | null;
+}
+
+export interface PortalOrganization {
+  tenantId: string;
+  tenantName: string;
+  workspaceId: string;
+  workspaceName: string;
+  role: string;
+}
+
+export interface PortalAuthSession {
+  ok: true;
+  csrfToken?: string;
+  expiresAt: string;
+  identity: PortalIdentity;
+  organization: PortalOrganization;
+}
+
+export interface PortalSignupResult {
+  ok: true;
+  verificationRequired: true;
+  expiresAt: string;
+  delivery: 'webhook' | 'development';
+  developmentVerificationUrl?: string;
 }
 
 export interface CredentialScope {
