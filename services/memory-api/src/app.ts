@@ -7,6 +7,7 @@ export interface AppOptions {
   port?: number;
   logLevel?: string;
   bodyLimit?: number;
+  portalOrigins?: string[];
 }
 
 export interface AppConfig {
@@ -20,8 +21,55 @@ declare module 'fastify' {
   }
 }
 
+function normalizePortalOrigin(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (!['https:', 'http:'].includes(parsed.protocol)) return null;
+    if (parsed.username || parsed.password) return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+function resolvePortalOrigins(explicit?: string[]): Set<string> {
+  const rawValues =
+    explicit ??
+    (process.env.MEMORYOS_PORTAL_ORIGINS ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+  const origins = new Set<string>();
+  for (const value of rawValues) {
+    const normalized = normalizePortalOrigin(value);
+    if (normalized) origins.add(normalized);
+  }
+  return origins;
+}
+
+function applyPortalCorsHeaders(
+  reply: { header: (name: string, value: string) => unknown },
+  origin: string,
+): void {
+  reply.header('access-control-allow-origin', origin);
+  reply.header('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  reply.header('access-control-allow-headers', 'Authorization,Content-Type,X-Request-Id');
+  reply.header('access-control-expose-headers', 'X-Request-Id');
+  reply.header('access-control-max-age', '600');
+  reply.header('vary', 'Origin');
+}
+
 export async function buildApp(options: AppOptions = {}): Promise<FastifyInstance> {
-  const { host = '127.0.0.1', port = 8787, logLevel = 'info', bodyLimit = 262144 } = options;
+  const {
+    host = '127.0.0.1',
+    port = 8787,
+    logLevel = 'info',
+    bodyLimit = 262144,
+    portalOrigins,
+  } = options;
+  const allowedPortalOrigins = resolvePortalOrigins(portalOrigins);
 
   const app = Fastify({
     logger: {
@@ -39,13 +87,31 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   app.addHook('onRequest', async (request, reply) => {
     let requestId = request.headers['x-request-id'];
     if (requestId && typeof requestId === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(requestId)) {
-      // Use caller-provided request ID
+      // Use caller-provided request ID.
     } else {
       requestId = crypto.randomUUID();
     }
     request.id = requestId;
     reply.header('x-request-id', requestId);
+
+    const originHeader = request.headers.origin;
+    if (!originHeader || typeof originHeader !== 'string') return;
+    const normalizedOrigin = normalizePortalOrigin(originHeader);
+    if (!normalizedOrigin || !allowedPortalOrigins.has(normalizedOrigin)) {
+      return reply.status(403).send({
+        error: {
+          code: 'PERMISSION_DENIED',
+          message: 'Origin is not allowed.',
+          requestId,
+        },
+      });
+    }
+
+    applyPortalCorsHeaders(reply, normalizedOrigin);
+    if (request.method === 'OPTIONS') return reply.status(204).send();
   });
+
+  app.options('/*', async (_request, reply) => reply.status(204).send());
 
   app.setErrorHandler(async (error, request, reply) => {
     const requestId = request.id as string;
